@@ -1,0 +1,5 @@
+# E-MU's copyrighted manuals: referenced in the README, not redistributed here.
+*.pdf
+
+.claude/
+.DS_Store

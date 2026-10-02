@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sea Change</title>
+<style>
+  :root {
+    --bg: #1a1a1d;
+    --panel: #25252a;
+    --border: #3a3a42;
+    --text: #e8e8ea;
+    --muted: #9a9aa3;
+    --accent: #4f8cff;
+    --accent-dim: #2a4880;
+    --btn: #2f2f36;
+    --btn-hover: #3a3a44;
+    --error: #ff6b6b;
+    --ok: #6bd49a;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header, section.controls, footer {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header { display: flex; align-items: baseline; gap: 12px; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .sibling { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: none; }
+  header .sibling:hover { color: var(--accent); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  select, input[type="search"], .clear-btn {
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  select:focus, input[type="search"]:focus { outline: none; border-color: var(--accent); }
+  #port, #rom, #search { min-width: 220px; }
+  .clear-btn { align-self: flex-end; padding: 6px 12px; cursor: pointer; }
+  .clear-btn:hover { background: var(--btn-hover); }
+
+  .banks {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+  @media (max-width: 900px) { .banks { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .bank-btn {
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 10px 10px;
+    text-align: left;
+    cursor: pointer;
+    min-height: 74px;
+    transition: background 0.08s, border-color 0.08s, transform 0.04s;
+  }
+  .bank-btn:hover { background: var(--btn-hover); border-color: var(--accent-dim); }
+  .bank-btn:active { transform: scale(0.97); }
+  .bank-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+  .bank-btn .title { font-size: 18px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+  .bank-btn .msb { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.7; font-weight: 400; }
+  .bank-btn .cats {
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+    opacity: 0.75;
+    margin-top: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bank-btn.has-active::after {
+    content: "●";
+    float: right;
+    font-size: 10px;
+    margin-top: -14px;
+    color: var(--ok);
+  }
+  .bank-btn.selected.has-active::after { color: white; }
+
+  main { padding: 14px 18px 18px; }
+  .presets {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(16, auto);
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 3px 4px;
+  }
+  @media (max-width: 1280px) { .presets { grid-template-rows: repeat(32, auto); } }
+  @media (max-width: 640px)  { .presets { grid-template-rows: repeat(64, auto); } }
+  .preset {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 6px 5px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 0;
+    transition: background 0.06s, border-color 0.06s;
+  }
+  .preset:hover { background: var(--btn-hover); border-color: var(--accent-dim); }
+  .preset:active { transform: scale(0.98); }
+  .preset .num {
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--muted);
+    width: 2.2em;
+    text-align: right;
+    flex: none;
+  }
+  .preset .cat {
+    font: 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+    flex: none;
+    width: 2.6em;
+  }
+  .preset .num.wide { width: 3.6em; }
+  .preset .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preset.numonly { justify-content: center; font: 600 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .preset.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .preset.active .num, .preset.active .cat { color: rgba(255,255,255,0.85) !important; }
+
+  .results-summary { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  #results h2 {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 14px 0 6px;
+  }
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 3px 4px;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--muted);
+    position: sticky;
+    bottom: 0;
+  }
+  footer .status.ok { color: var(--ok); }
+  footer .status.err { color: var(--error); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Sea Change</h1>
+    <span class="sub">E-MU Proteus 2000 preset selector · Web MIDI</span>
+    <a class="sibling" href="../small-change/index.html">Any other synth? Small Change →</a>
+  </header>
+
+  <section class="controls">
+    <div class="row">
+      <div class="field">
+        <label for="port">MIDI Output</label>
+        <select id="port"><option value="">— No MIDI access —</option></select>
+      </div>
+      <div class="field">
+        <label for="channel">Channel</label>
+        <select id="channel"></select>
+      </div>
+      <div class="field">
+        <label for="rom">ROM</label>
+        <select id="rom"></select>
+      </div>
+      <div class="field">
+        <label for="search">Search all ROMs</label>
+        <input type="search" id="search" placeholder="name or category, e.g. moog, pad dream" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type"><option value="">All types</option></select>
+      </div>
+      <button id="clear" class="clear-btn" hidden>Clear</button>
+    </div>
+    <div id="banks" class="banks"></div>
+  </section>
+
+  <main>
+    <div id="presets" class="presets"></div>
+    <div id="results" hidden></div>
+  </main>
+
+  <footer>
+    <span id="status" class="status">Requesting MIDI access…</span>
+  </footer>
+
+<script>
+// Proteus 2000 ROM preset names, transcribed from E-MU's operation manuals (Proteus 2000, Turbo Phatt, Orbit-3).
+const P2K_ROMS = [
+  { id: "CMPSR", name: "Composer", msb: 4, source: "Proteus 2000 Operation Manual Rev. E", banks: [
+    ["brs:SforzadoSect","brs:Soft Trumpet","brs:Solo 'Bone","brs:Synth Brass","brs:The Ensemble","brs:Too Bahhd","brs:Trmpt+Sect","brs:Tromboned","brs:Trombrass","brs:Trump FX etc","brs:Trumpet FX 1","brs:Trumpet FX 2","brs:Trumpet FX 3","brs:Trumpet FX 4","brs:Trumpet FX 5","brs:Trumpet FX 6","brs:Trumpet FX 7","brs:Trumpet Hard","brs:TrumpetMute1","brs:TrumpetMute2","wnd:A-SAX","wnd:AiryClarinet","wnd:Akkordione","wnd:Alto Saxo","wnd:B-Sax","wnd:B2-Sax","wnd:Bari","wnd:Big Top","wnd:Bottle Blow","wnd:Breathy Flt1","wnd:Breathy Flt2","wnd:Chamber Orch","wnd:Chi-Town","wnd:Clar/Oboe","wnd:Clarinet","wnd:Clarinette","wnd:English Horn","wnd:Fieldberries","wnd:Flt/Obe/Bone","wnd:Flute","wnd:Full Bari","wnd:G's Soprano","wnd:Grouch","wnd:Harmonica","wnd:Harmonika","wnd:Harmony","wnd:Monica Blow","wnd:Nuages","wnd:Oboe 1","wnd:Oboe 2","wnd:Ocarina 1","wnd:Ocarina 2","wnd:Pan Flute 1","wnd:Pan Flute 2","wnd:Pastoral","wnd:Polka Cheat","wnd:S-Sax","wnd:Sax FX 1 2 3","wnd:Sax Session","wnd:Shenai","wnd:Synth Flute","wnd:T-Sax","wnd:Tenor Phone","wnd:Virtuaccord","wnd:WindTrio","vox:Ahhs","vox:Arco Breath","vox:Common Vox","vox:Dark Angels","vox:Gossamer","vox:Gothic Dream","vox:Lo FakeChoir","vox:Lo-Fi Ether","vox:Majestic","vox:MauzeWowz","vox:Mist","vox:Odd Boys","vox:Odd Vox","vox:Oohs Souls","vox:PhasePhlips","vox:Pop Aahs","vox:Pop Oohs","vox:Slo Lunarvox","vox:Soul Oohs","vox:SpiritWorld","vox:SynthSing","vox:Tarzanalien","vox:ThroatRattle","vox:Tokenring","vox:Trapped","led:Apple Eater","led:Blue Danube","led:Cat's Nip","led:Dancerama","led:Dwiddle","led:Ethereosity","led:Flutter","led:Freakus","led:Intervalis","led:JabbaStabba","led:Laser Larry","led:Nice Lead","led:Post 90's DM","led:Q Snapper","led:Quacker","led:RememberWhen","led:Sci-Fi B","led:Shimmy","led:Shiner","led:SineSurprise","led:Smack Bender","led:Speedronic","led:Syrian Nod","led:Wandering","led:Weezy Lead","led:Worm 1","led:Worm 2","led:Wormwood","led:Wormy Janis","led:Zaw Za Zah","wav:Arp","wav:Bass Synth","wav:Bell Synth","wav:Blipper","wav:Buzz Saw Syn","wav:Chime","wav:CZ Echo","wav:CZ Lead"],
+    ["wav:CZ101 Digi","wav:Dig Buzz Syn","wav:Eraser","wav:ES Rag","wav:Fat Attack","wav:Glass Perc","wav:Hollow Deep","wav:Juno Pulse","wav:Juno Square","wav:Log Hit","wav:M12 Lead","wav:M12 Sync","wav:Magic","wav:Metal 1","wav:Metal 2","wav:MetalAttack","wav:Mini Lead","wav:Moog Lead","wav:Narrow Synth","wav:Overtone Syn","wav:Perc Axe Syn","wav:Pluck Tone","wav:Pop Square","wav:PPG","wav:Pure H","wav:PWM","wav:Rast Keys","wav:Rezzy","wav:Spacey Keys","wav:Square Lead","wav:SquareAttack","wav:SquareChorus","wav:Syn Tone","wav:Sync 1","wav:Sync 2","wav:Sync 3","wav:Sync 4","wav:Sync 5","wav:Sync 6","wav:Synth Wave","wav:Synthetic","wav:VS Voxwav","wav:VS37","wav:VS48","wav:Whine","wav:Wild Synth","syn:5th Brass","syn:8O8 Synthax","syn:Arpitty","syn:BenderPlanet","syn:Big Planet","syn:Blippoid","syn:Brazz","syn:Buzz Synth","syn:Conglomo","syn:CZ Synstring","syn:DigiBuzphaze","syn:Digiglass","syn:DinkedSquare","syn:Ensemblist","syn:Ethnosplint","syn:Euro Wave","syn:Fat Slide","syn:Festival","syn:Gritstrings","syn:Heavy","syn:Hi Oct Synth","syn:Hi String","syn:Hydraine","syn:Little Tins","syn:LOCoCution","syn:Messy","syn:Mood Strings","syn:Moog","syn:NarrowEscape","syn:Nervous","syn:No NerveNet","syn:OBX Saws","syn:OohAhh Vox","syn:P5 Brass","syn:ProfitMargin","syn:Promoseus","syn:Pulse Pulse","syn:Pulsey!","syn:Pweet Square","syn:Razor","syn:Razor Edge","syn:Rez Synth","syn:Rezzy Wave","syn:Saw Blip","syn:Saw Stack","syn:Saw Sweep","syn:SawsweepComp","syn:Skreach Arp","syn:Soft Synth","syn:Synbrasso","syn:Syncsyn Clav","syn:Syncty","syn:SynEnsemble","syn:Syntax On2","syn:Synthall AT","syn:Synth Brass","syn:ThinHi Worm","syn:ThinTecPulse","syn:Transpander","syn:VoxNonsense","syn:Wheezy Worm","syn:Wildsync","syn:Z&C Leeder","pad:AirBorn","pad:Classic","pad:Cloud 9","pad:Crystal Beam","pad:Dance Chord","pad:Dances Well","pad:Deep Spacy","pad:Dream Pad","pad:Dreamer","pad:Dreamy","pad:Floatatious","pad:GreaT","pad:Highway","pad:Infants","pad:JP6 Pad","pad:Keyngdom","pad:Kingdom High","pad:LOCoMotion","pad:Meloden"],
+    ["pad:MetalBeats","pad:MovingBells","pad:Pad Life","pad:Paddy","pad:Paddy Flange","pad:Phat Pad","pad:Phat Pan","pad:Pulsation","pad:PWM Melopadd","pad:PWM Rezslide","pad:RiffTrippin'","pad:Spinwip Octa","pad:SweptAway","pad:Synth Pad","pad:Tunguska","pad:Under Pad FM","pad:Urban Pipe","pad:Whisp","pad:Xylo Pad","pad:Zoom","pad:Zoom 2000!","pad:Zyzzle","bpm:Build Up","bpm:Choice 1","bpm:Deep Blue","bpm:DXBeat","bpm:Electronica","bpm:Free Love","bpm:Freeze","bpm:Industry Vox","bpm:Move Clock !","bpm:Something","bpm:The Man","bpm:Waver","hit:Alta Trumpt","hit:Bass Slips","hit:Basses","hit:Big Band","hit:Biggy Brass","hit:Brass Batz","hit:Brass Bite","hit:Brass Hits 1","hit:Brass Hits 2","hit:Brass Hits 3","hit:Brass Hits 4","hit:Brass Hittas","hit:Brass Hitz","hit:Da Danzits","hit:Dance Hits 1","hit:Dance Hits 2","hit:Deep Brass","hit:Dirt Strings","hit:Fashion","hit:Garagiste","hit:Guitars","hit:Guitarzits","hit:Orch Fatlow","hit:Organ Hits 1","hit:Organ Hits 2","hit:Poker","hit:Punch Prak","hit:Sax Scandals","hit:Skweeler","hit:String Hits","hit:Synth Basses","hit:Vox Grunts","hit:Vox Hits 1","hit:Vox Hits 2","hit:Vox Hitties","orc:Brasso","orc:Combo","orc:Fanfare","orc:Orch w/Perc","orc:Orchestra","orc:PnoBrsStrg","orc:Str/Brs/Wd1","orc:Str/Brs/Wd2","orc:Str/Brs/Wd3","sfx:30","sfx:7O's Phazzy","sfx:AKS Vinyl","sfx:Bad Bells","sfx:Bass Scrape","sfx:Bass Thud","sfx:Crickets","sfx:Crowd","sfx:DawnFollows","sfx:Full Circle","sfx:Gtr Scrape 1","sfx:Gtr Scrape 2","sfx:GtrBodyKnock","sfx:Guitar Pick","sfx:Hello!!!","sfx:Hill","sfx:It's Coming","sfx:Loop 3","sfx:NightCrawler","sfx:Oh No its...","sfx:Ohh","sfx:PnoSndBoard","sfx:PoppysOnMars","sfx:Ritual","sfx:StringScrape","sfx:TarzansDance","sfx:We Ha","sfx:WhoaWhoa","sfx:Woooo!","sfx:Ya Who","nse:Carrion","nse:Dust Bunny","nse:Jungle Pump","nse:Lift Off","nse:Pink","nse:StopThat!","nse:Vinyl","nse:White","scr:Cuts & Hats","scr:DissedSkrach","scr:Dogs'nHeat","scr:From Vinyl","scr:Monsta Slips","scr:Outa Sqaced","scr:Play It","scr:PuppyAlarm","scr:Scratches 1","scr:Scratches 2","scr:Skrach Dis","scr:Vinyl Set"],
+    ["prc:Acidphone","prc:Agogos","prc:Bell Tree 1","prc:Bell Tree 2","prc:Bells1","prc:Bells2","prc:Blocks1","prc:Blocks2","prc:Borneo","prc:C Bells","prc:Cargo","prc:Claps 1","prc:Claps 2","prc:Claves","prc:Congas1","prc:Congas2","prc:Cyms 1","prc:Cyms 2","prc:Electro","prc:Flexi","prc:Guiros","prc:Hard Vibes","prc:Hats 1","prc:Hats 2","prc:Hi Bell","prc:Kalimba","prc:Kix 1","prc:Kix 2","prc:Log On","prc:Maracca","prc:Marimba","prc:Miscellany","prc:Orchestral","prc:Perky Dance","prc:PerkyThings1","prc:PerkyThings2","prc:Plexitone","prc:Progress","prc:Shakers","prc:SiameseCats","prc:Snaps","prc:Snares 1","prc:Snares 2","prc:Soft Vibes","prc:Stuff 1","prc:Stuff 2","prc:Tams 1","prc:Tams 2","prc:Timbs 1","prc:Timbs 2","prc:Timpani","prc:Toms 1","prc:Toms 2","prc:TV Spy Vibes","prc:Velo Vibes","prc:Vibraslap","prc:Village","prc:WoodHitsBell","prc:Xylophone","kit:424","kit:Kit 02","kit:Kit 03","kit:Kit 04","kit:Kit 05","kit:Kit 06","kit:Kit 07","kit:Kit 08","kit:Kit 09","kit:Kit 10","kit:Kit 11","kit:Kit 12","kit:Kit 13","kit:Kit 14","kit:Kit 15","kit:Kit 16","kit:Kit 17","kit:Kit 18","kit:Kit 19","kit:Kit 20","kit:Acoustic 2","kit:All Niter","kit:Berzerker","kit:BMF","kit:Booster","kit:ClassicHouse","kit:Clean R&B","kit:ClubVinyl","kit:CookUsAHit","kit:Dance 1","kit:Dance 2","kit:DearLyBeEmuD","kit:Dee and Be 1","kit:Dee and Be 2","kit:DeepBooty","kit:Disenegrate","kit:Drum 3","kit:Drum/Bass 1","kit:Drum/Bass 2","kit:Drum/Bass 3","kit:Drum/Bass 4","kit:Drum/Bass 5","kit:Drum/Bass 6","kit:DrumBuzza","kit:For Real","kit:Gate Dances","kit:Gett..OutPt2","kit:GritKitt","kit:HatAttack","kit:Hot Swing","kit:Jams","kit:Jazz Quartet","kit:Jazz Trio","kit:OnTheTip","kit:Phased DrumR","kit:Phattasassin","kit:R&B Flava","kit:Shag","kit:Skin Drums","kit:Smackers","kit:SounDfacTory","kit:Speed Garage","kit:Subversive","kit:Swing Hop 1","kit:Swing Hop 2","kit:Swing Hop 3","kit:This & That","kit:Tribal House","kit:Werzerker"],
+    ["kb1:DynamicGrand","kb4:Yo My Dynos","orc:Orchestral","gtr:Grusty","bs1:A Ku Stq","kb3:Rock'in B","kb2:WideSuitcase","led:Zimppler","bs4:AnalogPlanet","kit:Kit 1","kb1:And Voice","sfx:MetalScience","syn:Silk OBXsaws","gtr:Stolen7Away","brs:Movie Brass","str:Dyna-heim","bpm:Jumping","vox:New Age Oohs","bs4:Sugar Freak","kb4:Clavinetti","kit:Acoustic 1","brs:BreathyTBone","wnd:Real Flute","str:Allin a Pizz","bs4:Walky Talk","str:Filmscore","led:L.V.'s Worm","kit:Bag O Tricks","kb2:Melosoul EP","wnd:Breather","vox:Frozen Time","hit:MasterBlast","gtr:NyloSteel","kb3:JimmyJazzy B","kit:Kit","bs2:Fing&Harms 2","kb2:Lovers Fm EP","syn:JunoPlseComp","gtr:WaaKeeGa","led:inBottles","kb1:Ballad Grand","kb1:Chime Grand","kb1:Concert Pno","kb1:Dance Pno","kb1:Elecro7CP","kb1:Grande","kb1:HonkTonkeyz","kb1:Klassical","kb1:Layer Piano","kb1:Miami Grand","kb1:Piano Mio","kb1:Piano&Strng1","kb1:Piano&Strng2","kb1:StereoGrand1","kb1:StereoGrand2","kb1:StereoGrand3","kb1:StereoGrand4","kb1:Sung Piano","kb1:Techno Piano","kb2:Ballad Tine","kb2:Classic EP 1","kb2:Classic EP 2","kb2:Classic EP 3","kb2:Classic EP 4","kb2:DooGie","kb2:Dynofunk EP","kb2:FM El Piano","kb2:FM EP 1","kb2:FM EP 2","kb2:FM2Classic","kb2:Hard Dyno","kb2:Hard EP","kb2:Hard Tine","kb2:Med Dyno","kb2:Med EP","kb2:Pretty EP","kb2:PrettyLushEP","kb2:Rezzroadz","kb2:Suitcase EP","kb2:Supatramp EP","kb2:Wurlitzer Hd","kb2:WurlitzerSft","kb2:WurlyD'Layer","kb3:B3 X-Wheel 1","kb3:B3OrganWave1","kb3:B3OrganWave2","kb3:Bally Yard","kb3:Clean X-Whl","kb3:Clicky B","kb3:Day","kb3:DirT baG","kb3:DirtyHertz","kb3:Disco","kb3:Drawbar","kb3:Drawbars","kb3:DX","kb3:DX Organ","kb3:Full Organ","kb3:Gospel Soul","kb3:GreenEyed","kb3:Gritty B Wav","kb3:Grundge XXX","kb3:JX Organ","kb3:Kool N Mello","kb3:Mellow Man","kb3:Nod","kb3:Oddd Organ","kb3:Org Lite","kb3:Organomics X","kb3:Perc Organ","kb3:Pipe Organ","kb3:Simple Organ","kb3:Testify","kb3:Tone Organ","kb3:Upper B","kb3:Vox 1","kb3:Vox 2","kb3:WheelSpeed B","kb4:Breathy","kb4:Clavinet 1","kb4:Clavinet 2","kb4:Clavinet 3","kb4:Clavin' It","kb4:Clavity","kb4:Comp Keyz 1","kb4:Comp Keyz 2","kb4:Comp Keyz 3","kb4:Crystal"],
+    ["kb4:Dance","kb4:Dyno Piano","kb4:DynoWahClav","kb4:E Grand","kb4:Elecre 1","kb4:Elecre 2","kb4:Elecre 3","kb4:Electrified","kb4:EP Fog","kb4:EP Roll 1","kb4:EP Roll 2","kb4:EP Roll 3","kb4:Farfisa 1","kb4:Farfisa 2","kb4:Farfisa 3","kb4:Grand FM","kb4:Hard Comp 1","kb4:Hard Comp 2","kb4:Hard Comp 3","kb4:Hard Comp 4","kb4:Hard Comp 5","kb4:Hard Tined","kb4:Knockkerz","kb4:M12Tines","kb4:Mystery Roll","kb4:Nu Tynez 1","kb4:Nu Tynez 2","kb4:PerkyRhodes","kb4:Pharpheeza","kb4:PnoWndStrg 1","kb4:PnoWndStrg 2","kb4:Roll","kb4:RollinDreams","kb4:Syn Ballad","kb4:Synth Cheese","kb4:Synth Organ","kb4:Tine EP","kb4:Vox-A-Phaze","kb4:Whistle Keys","bs1:Acoustic","bs1:DynoStandUp","bs1:Up ~","bs1:Upright 1","bs1:Upright 2","bs1:Upright Days","bs1:WalkinUprite","bs2:BADtube","bs2:Big Basic","bs2:EP 1","bs2:EP 2","bs2:EP 3","bs2:EP Bass","bs2:Fing&Harms 1","bs2:Finger Out","bs2:Finger&Harmz","bs2:Finger1","bs2:Finger2","bs2:Fingered In","bs2:Fretless 1","bs2:Fretless 2","bs2:Fretless 3","bs2:Fretless 4","bs2:Fretless 5","bs2:Fretless'd","bs2:FretterNot","bs2:Full Finger","bs2:Gruzzy Pop","bs2:Harmonics","bs2:MelloRounder","bs2:Picked","bs2:Picked Off","bs2:Pop","bs2:Pop Slide 1","bs2:Pop Slide 2","bs2:Pop Slide 3","bs2:Pop Slide 4","bs2:Signfeld Pop","bs2:Slap 1","bs2:Slap 2","bs2:Slap 3","bs2:Slap 4","bs2:Slap 5","bs2:Slap Me!","bs2:SlapBack","bs2:Slappity","bs2:Slop Bass","bs2:Sloppiest","bs2:Spankin","bs2:ThickFretles","bs2:VeloFretless","bs3:26","bs3:Analow","bs3:ATC 1","bs3:ATC 2","bs3:ATC 3","bs3:ATC 4","bs3:Beauty","bs3:Below Sub","bs3:Big Basic","bs3:DB Sub","bs3:Easy","bs3:Face Bass","bs3:Fat Sunbass","bs3:Four U","bs3:HipPocket","bs3:Homeboy E","bs3:Ice","bs3:JP-Moog 4","bs3:Line","bs3:Lowness","bs3:MassiveMini","bs3:MooG DropS","bs3:Moogy Mudd","bs3:Planet Bass","bs3:Plex","bs3:Poly Style","bs3:Real Low","bs3:RoundabouT","bs3:SE Micro","bs3:SE Sub 1","bs3:SE Sub 2","bs3:Spanker","bs3:Spkr Damage","bs3:Sub Core","bs3:Sub Drop","bs3:Sub Plunk","bs3:Sub Poke","bs3:Sub Pummeled"],
+    ["bs3:Sub-Basement","bs3:Subtle Bass","bs3:Super Sub","bs3:The Tunnel","bs3:Thickley Dub","bs3:Thip Kong","bs3:Way Low Down","bs3:Wide Chorus","bs3:ZuB CoMpLeX","bs4:3 O WorM","bs4:Acid","bs4:Acid 4 Ever","bs4:Analogic","bs4:Asidic Bass","bs4:Bass Hit","bs4:Bass ic","bs4:Bernie Funk","bs4:Big Sync","bs4:Bondomatic","bs4:Brite Beauty","bs4:Brolin's 1st","bs4:Buzza","bs4:Crystal Meth","bs4:CZ1","bs4:DB","bs4:DB9 1","bs4:DB9 2","bs4:Deep Pocket","bs4:Digi-Punch","bs4:Distorto-TB","bs4:Examination","bs4:FM","bs4:FM Sonic","bs4:FP Powerbass","bs4:HaLLoW !","bs4:In the Money","bs4:JP4 Bass","bs4:Juno","bs4:Luke's Best","bs4:Memory Moog","bs4:Micro","bs4:Mini 1","bs4:Mini 2","bs4:Mini 3","bs4:Mini 4","bs4:Mini More","bs4:Mod da Wheel","bs4:Moog 1","bs4:Moog 2","bs4:Moog Tri","bs4:Mr. Clean","bs4:Not So Mini","bs4:Occitan Root","bs4:Octave","bs4:Org Gruz","bs4:Osc-Kars","bs4:PercoOrgana","bs4:Plexy","bs4:Power Q","bs4:PuLs A'ting","bs4:Q Attack","bs4:Q Bass 1","bs4:Q Bass 2","bs4:Q Bass 3","bs4:Q Bass 4","bs4:Q Snap","bs4:Reverend JB","bs4:Ripped3","bs4:Saw Sync","bs4:Sawz","bs4:SE 1","bs4:SE 2","bs4:SE One","bs4:Shift","bs4:Simple 3","bs4:Sobered Up","bs4:StraytUPjunO","bs4:Sync Echo","bs4:Synth 1","bs4:Synth 2","bs4:Synth 3","bs4:Synth 4","bs4:Synth 5","bs4:Synth 6","bs4:Synth 7","bs4:Synth 8","bs4:Synth 9","bs4:Synth","bs4:TB 1","bs4:TB 2","bs4:TB 3","bs4:TB 4","bs4:Thunk","bs4:Tight Mo MW","bs4:Tres o Tres","bs4:Walky Talk2","bs5:All Purpose","bs5:Buzzed","bs5:DX 1","bs5:DX 2","bs5:DX 3","bs5:Feeder","bs5:Funkalicous","bs5:Home 1","bs5:Home 2","bs5:Hybrid","bs5:Knocker","bs5:Mozambique","bs5:Mozamdrip","bs5:Oh Yea","bs5:Organ Bass 1","bs5:Organ Bass 2","bs5:Perco","bs5:Phlappy","bs5:Pocket","bs5:Pure","bs5:Say What","bs5:Slider","bs5:Smoothy","bs5:Soft & Hard","bs5:Sonics","bs5:Spitt","bs5:Spread","bs5:Standard","bs5:Street","bs5:Tapp","bs5:Thickener","bs5:Ultimate 1"],
+    ["bs5:Ultimate 2","bs5:Ultimate 3","bs5:VP1 1","bs5:VP1 2","bs5:WetMonica","gtr:Carlos","gtr:Cast Teller","gtr:Chuckin","gtr:Cry Babies","gtr:Dark Gut","gtr:Distorter-X","gtr:Dolobroso","gtr:El Mute 1","gtr:El Mute 2","gtr:Electric 1","gtr:Electric 2","gtr:ElectricDis","gtr:EmmTV Crunch","gtr:FlangnVioWah","gtr:FullNylon","gtr:FunkChunk","gtr:Heavy Mon","gtr:JangleWah","gtr:Jazz","gtr:Jazzed","gtr:LA Strata","gtr:Looz 12s","gtr:MellowElect","gtr:Metal Head","gtr:MutableJazz","gtr:Mutant Pick","gtr:Mute Gtr vsw","gtr:Mute-Ted","gtr:Mutes","gtr:Nrysty","gtr:Nrysty","gtr:Nye Lonny","gtr:Nylon","gtr:Nylon Silk","gtr:Nylon Vox","gtr:Nylonistic","gtr:Pantastic","gtr:Power 1","gtr:Power 2","gtr:Rezatronics","gtr:Slippery Joe","gtr:SlipSly","gtr:Spy","gtr:Steel","gtr:Steel Real","gtr:Strat Wow","gtr:The 12String","gtr:ThickPick","gtr:TwangyNylon","gtr:Waaaa Waaaa","gtr:Wah Minor","gtr:WahWah Spice","str:Abbey'Strngs","str:Analog","str:Analogic","str:ArcotremPizz","str:Big Strings","str:ChamberGrp","str:DarkMoods","str:Digital 1","str:Digital 2","str:Drews Harp","str:ExtremeStrng","str:Fortuna","str:GlissiPizzi","str:Helium","str:Hindookurdoo","str:Japanman","str:Koto","str:Kult E Vatn'","str:Many Quarts","str:Matrix Synth","str:MeltroniKnbD","str:Morocco Feel","str:Obie'anna","str:Pizzicati","str:Pizzicato","str:Real Matrix","str:Rich Analogs","str:Section","str:Sectioned","str:Sham Wave","str:SitarTalk","str:Sneajy","str:Solo Quartet","str:So Long","str:SoloOutFront","str:Swoon","str:Texture","str:The Lonely 1","str:Tron","str:TronStrings","str:Velo Marcato","str:Victrola","brs:5th Wave","brs:Airy Trumpet","brs:B4PCM Brass","brs:Barry Bones","brs:Bigga","brs:Bone","brs:Brass&Bari","brs:BrassControl","brs:Brassy","brs:Breathy Mute","brs:ClassicBrass","brs:Da Brasses","brs:Dizzy","brs:Don'sTrumpet","brs:Ensemble","brs:Han's E4s","brs:Horny","brs:Huge Brass","brs:Louis","brs:MellowD'Trmp","brs:Miles","brs:Profit 5","brs:RadioHorns","brs:Reed & Brass","brs:S'miles","brs:Schwyn 1","brs:Section","brs:SforzadoEnsb",":default"],
+  ] },
+  { id: "PHATT", name: "Pure Phatt", msb: 13, source: "Turbo Phatt Operation Manual Rev. A", banks: [
+    ["bts:Becky Boise","bts:The Ultimate","bts:Iced Out","bas:SubLevel","gtr:Wah Getarrs","bts:MooshooClan","key:Chords&Hits","pad:Spirit Call","str:GothStrings","bts:Hot n Steamy","bts:8nt Urz","kit:Hive Jiver","syn:Plucky","bas:Slap Pop","gtr:Sexy Slider","pad:Cherubs","bts:I Miss You","vox:theWatcher","key:SOOTCaSE'000","led:Handwormed","sfx:WooleyBOB!","str:Sincerely","syn:Synelead","syn:Prof Brass","gtr:HardCore","bpm:Clockworx 1","gtr:General'sGtr","syn:SycoGirL","key:Klav Synth","str:MadDramA \\","hit:All 1","gtr:NyLonArP","gtr:Pinky Fingaz","str:Harpo","pad:Synthetic","bas:YarsRevenge","pad:Blades","brs:SlapdatBrass","key:VINYL 73","key:FAR-FG-NUGEN","syn:LadyOrgan1","pad:QuietTime","led:MonoGrunge","gtr:Linky Fingaz","str:Ooops!","pad:Nitrogen","str:Pizz Strings","bts:YeaYeaZ","arp:SupermanSaw","key:Orgg Doggie","syn:TinkerToyz","pad:JP Layer","gtr:BedofFire","key:Phat Klav","bts:Beat Prophet","kit:Betta Beata","led:AllJackedUp!","sfx:SolarBaBies","syn:DeGlown","bts:KattznJammah","kit:MuSic2DrIvBy","gtr:SyCoCry","vox:All Talk","bas:Digger Bass","gtr:Heavy","kit:Oh Yeah","kit:Jelly Belly","syn:BoogieBAbY","kit:Cool Guy","kit:FriscoLayer","bts:CreatrLayer","bts:I Miss You 2","bts:VideoGamez","syn:WePhattField","syn:Ohoooo!","sfx:MarsattaksII","key:Sitar 88","vox:Agony Agony","vox:Voicyst","syn:WhY Me ?","vox:DadeezGAL:)","amb:Underground","bas:Rez Ripper","pad:DeadMetal 1","key:Org De Borg","key:Piano Jam","key:Tiny Wonders","kit:Obsession","kit:Regal Gate","bas:Fretless","sfx:Sick Girl","sfx:KindaMuddy","syn:SPICEBOY:-)","syn:SuKaButt","str:Fade It","hit:StrikezAgain","syn:WeirdVox","bas:Box O Bass","bas:Poppy","pad:OuterLimits","str:FakingIt","str:Section","str:Pizz&Sct MW","str:Nightmare","syn:SoftStuff","kit:10HiHatMode","str:MistyStrng","pad:StringLayer","pad:HiQ Skwarez","amb:PeakinHard!","prc:Kix 1","prc:Kix 2","prc:Snares 1","prc:Snares 2","prc:Snares 3","prc:Hats 1","prc:Hats 2","prc:Cymbals","prc:CongasBongos","prc:ClapsnSnaps","prc:Toms","prc:Bells","prc:Claves","amb:LiquidBatz","prc:ShakeHerz","amb:DeathLaughs","prc:Misc","led:I Saw Worms"],
+    ["bts:TEMPLATE","syn:Auto Doom","vox:Zeldas Fault","pad:Darth Works","key:Harp Klav","key:Tine Split","syn:VoxRoller","prc:Rainstick","prc:WhirlyBird","prc:Fills","prc:Shakers","prc:Scratches","prc:SciFi Toy 1","prc:SciFi Toy 2","amb:PlezLemmeGo!","gtr:Gener El","hit:All 2","prc:Thumb Piano","prc:Per Oct","prc:PerOctLink","gtr:NylonFantasy","brs:Crunchy","bts:Play Cousin","bas:SubVocoder","bts:ShakitZ","bts:Girl Watcher","kit:TribeOMatic","bas:Standin","str:Ballad Harp","hit:DroppinOff","key:CityGiggin","brs:Philta","brs:Biggg","gtr:WackaParty83","gtr:WackaParty2","gtr:Wacka 96","gtr:Wacka 113","gtr:Wacka 3 83","key:Crunch Klav","brs:Hitz","bas:Sonic Sine","vox:TB Eweew","gtr:Cyclone","sfx:DownTheDrain","arp:PhiltaSweepa","kit:09HiHatMode","bas:SubSonicTri","brs:Brass+Tine","sfx:YaYaYa","bas:Deeper","bas:Acid","bas:BelowaWoofer","bas:GutPunched","kit:WhatYouWant?","bas:It Too","brs:Lotsa","bas:Fishy","bas:SubOne","bts:Wide Hive","bas:FuzzSubby","bas:SubTwo","bas:SubThree","bas:SubFour","bas:SubFive","bas:SubSix","bas:Election","bas:Acid 2","bas:Crandle","bas:Frogged","bas:Babybass","bas:Soulfuzz","bas:Speakeasy","bas:BellyButton","bas:KeyOnate","bas:Prophet","bas:Persistent","bas:Squared","bas:TheoryBass","bas:MarkOther","bas:Funk Pop 1","bas:Funk Pop 2","bas:Velo SlapPop","bas:Funky Finger","bas:Funky Pik","bas:Funk Wave","bas:Accidental","bas:Fingered","bas:Bagg","bas:Distroy","bas:Blip","bas:Hecho Itter","bas:Dubby","bas:Dubby 2","bas:Grit","bas:Kraft","bas:Kraft 2","bas:Technoid","key:PianoJam2","bas:Plucky","bas:Harpbass","bas:Upright","gtr:Crybabe 1","gtr:Wacka","gtr:Wacka Talkin","gtr:Wacka Do","gtr:Chickn'1","gtr:Chickn'Dist","gtr:Chickn'Slide","gtr:Exciteable","gtr:Hen Drix","gtr:Lik Delay","gtr:Lik Choppy","gtr:Wackaloo","gtr:Willpy","gtr:Odlil","gtr:YeWah","gtr:Wah DisLik","gtr:Wah Not","gtr:Wah Scale 4","gtr:Wah Scale 7","gtr:Wah Upper","gtr:SpRinkel","bas:Eat Me!","syn:WapperFuzz","syn:Slippery","gtr:DirtyNoter","kit:HappY'Z","str:Uni Strings"],
+    ["gtr:Wah Walker","syn:Sin Symph 1","gtr:Mood","gtr:Nylon","gtr:Nylon 2","gtr:Slide Hit","gtr:Fine Slide","gtr:Grit Slide","gtr:Strata","gtr:Strum Glass","gtr:Flange Pick","gtr:Grunge","gtr:One Shot","gtr:Slo Strum","gtr:Kraked Tube","gtr:Burnt","gtr:Weezl Fuzz","gtr:Slicer","gtr:Dissed Hit","gtr:Doom 1","pad:Drone 1","pad:Drone 2","pad:Drone Swirl","pad:Siren Spin","pad:Leon's","hit:Guit n Hat","hit:Satisfying","hit:Org Creept","led:Deep Thought","led:70's Lead","led:Guitlet","syn:Synthomatic","pad:Transform","amb:Droning MW","amb:Rubble MW","bas:DropOffSine1","bas:DropOffSine2","key:So Kazual","hit:Wheely Gal","bas:DropOffSine3","bas:DropOffSine4","key:Org Basic","key:Klav Mav","syn:ReturnToZoo","str:Disco Diva","pad:DanceLitez","gtr:Weeoww","led:RaveEEEE","led:RaveAAHH","pad:AditivOrgan","pad:Trans","pad:Narwhal","amb:Trippin MW","kit:WideOne","kit:ThugItUp","kit:OnDaStreet","kit:The Wiz","pad:KnobbyTwirly","kit:PhilterFreak","kit:Nu Funk","kit:Relapse","kit:HardStep","rom:Play Thru","hit:Sweeit","hit:Knock U Out","hit:Nice Under","hit:Splash","str:Suspence","key:Growl Drop","key:HarpsiFlange","str:HybridSweep","key:Kool Kord","key:Org Roll","key:Perk Organ","str:Synth String","key:Horror Glide","brs:Caliente","brs:Trump Slide","led:FantasyWormz","bts:SpaceBoyZ","led:Yearning","led:Reeder","led:Violetta","led:Stevie","sfx:Mr.Clean","sfx:Shield","sfx:Syclear","sfx:Reaper","vox:Ahyeeyah","pad:Pulsar","hit:Carney Hits","hit:Brazit 1","hit:Brazit 2","hit:Brazit 3","hit:Brazit 4","hit:Brazit 5","hit:Spizy","pad:Worry","str:Orchestsyn","syn:Grinder","syn:Weeperr","amb:Seascape","sfx:Wet Trippy","syn:Two Step","syn:Prosync","kit:Mo Dist","kit:Slappy","kit:DarkFlower","kit:Funk 4 Life","kit:Perky","kit:Crunch","kit:Klippy","kit:GM Two","kit:SubwayTunnel","kit:ClasikStudio","kit:ScratchHead","kit:FiltrSKRATCH","kit:Vilper","kit:DubItUp","kit:NewBeat","kit:CornaSto'","sfx:BlowinUp1MW","prc:ScratchMatic","kit:Construction","kit:NuMetal","bas:Cube Bass","bas:Iggio Basso","syn:Objections"],
+    ["vox:Dronodians C","bts:ItsUAgAIn?","kit:UainT@&#!","bts:AllmyMoMeeS","bts:Glo BabieeS","bts:Sistahoney","bts:IT'SLIKE Dat","str:StackedLegs","bts:Q BORO","vox:SingingTB","bts:My Girl YO","kit:RiDe E-Z","bts:DirTay drTee","bts:MounTenbery","kit:SalsA Crunk","vox:FemmeDoTell","kit:Lesster","key:NoMoreKlav","bts:LAST CHANCE","kit:A YO IIGHT","kit:GOOD MU Sic","syn:Sin Symph 2","bts:MALE BASHER","bts:DoitZ","kit:GuesWho'sBak","bts:U4 Got ME","vox:Pretteeee.II","bts:Dr.Banner","rom:I Like U","bts:SmoothoneZ","kit:TiME SquaRe","bts:Oh BaebeeZ","bts:GrungeZ","bts:ClapYoHandZ","bts:LaLaZ","bts:DialToneZ","str:Sa-Spen Ful","key:Perc Klav","key:SiMPeL","sfx:theHitcher","key:Pretteeee...","gtr:DaBradies","amb:CosmicKlasik","syn:WAWIFLHEAD","vox:Voxcade","key:MO 88","key:SOOTCaSE'300","arp:Plop","key:Doodee","gtr:Gen X","key:KeyStonE","str:VIRGOE","vox:PretteeeeIII","arp:AgonyOrgon","vox:SycoBoy","key:MO'E DAN","key:StoneGroove","key:WaThunk","vox:Vespers","gtr:SprinkleItOn","kit:EasyRider","syn:WeirdVox2","kit:Stoopit","syn:SilkWerm","syn:LadyOrgan2","amb:RaveSlave","amb:MiseryMod","kit:Young Luv","pad:TheMadSweep","kit:Woo Kid","pad:JoVox","bas:Razza","led:RaveLine","led:SineWorm","led:ProphetLine","bts:MO'HAPPYfeet","amb:YouPhoned?","amb:PhonedAgain?","pad:OB Layer","amb:VocodAhhh...","key:PhatttTines","bts:Luvline 1","bts:Luvline 2","bts:Luvline 3","key:CloudKeys","pad:Luxury","led:Glue Tone","kit:MarchMadnezZ","key:Tine Fuzzies","gtr:Voyeur Trax","bts:Boombaa","bts:AstralTravel","key:IntoTheLight","gtr:Psycho","kit:7 HiHatMode","key:Tine Klav","bts:Geechee GLO","kit:WhatUstarted","kit:BabyDoll","bts:New WhirlOdr","bts:Wile U Werk","kit:U NO","bts:HeY !","kit:My Main Man","bts:Can I Talk","bts:DJ GLO Jenkn","clk:Clockworx 2","prc:HiHatMono 1","prc:HiHatMono 2","key:Skini Klav","prc:Bells Mono","key:HipHopTines1","key:HipHopTines2","vox:You","led:Screamer","led:MonoBrass","pad:Chasers MW","pad:LadyPulsar","pad:MeltingHartz","arp:Low&Square","vox:LetsDance","vox:Earth Lisa","gtr:Disturbed","bts:DaPhattest","bts:Sunrise","key:ReBeckTines","bts:Luv Joe'ns",":Default v1.0"],
+  ] },
+  { id: "TeCnO", name: "TSCY (Techno Synth Construction Yard)", msb: 65, source: "Orbit-3 Operation Manual Rev. A", banks: [
+    ["hit:Intruder","bpm:Voxa Move","syn:ScreamSync 1","kit:909 Audition","pad:Rise to Fall","tec:Vel Swing","bas:T-Be Sawy 1","pad:Thin Strings","kit:GM Groove 1","org:Dancy 1","sfx:Phee Two Kay","wnd:Panflute Sof","kit:GM 808-1 BD1","kit:Noise Hits","amb:Aioon Pad","syn:Romancer","led:Proteo Moogy","tec:Dutch Stab 1","tec:Kraft Kord","amb:Seam to Pad","syn:80s Brass","syn:Modulair Seq","bas:Warm Groovy","kit:GM 808-2 BD2","kit:909-1 Dance","prc:Voca Snare","sub:Prophet","bpm:Pad Winder","tec:Velo VoX 1","bas:SH-101 Choru","kit:TeCnO 4","bas:T-Be Distort","kit:TeC Percus","bpm:SemiLife","led:Modern Fifth","bas:Krafta Bass","tec:Pizzi Chord","hit:Ito 11th 1","bpm:Vox Sequence","syn:Juno Dance 1","bas:Swing","pad:Soft 2000","tec:Velo PWM 1","tec:Snaro Lead","hit:Happy Major3","pad:Floating","tec:Da Chord me","hit:Sweet 7 Pizz","bpm:Mystical","tec:Rogue Chord","pad:Tron Analog","bas:Deep mover","bas:Deep Steady","pad:Soft Oooh","bas:Talky Voxa","kit:GM Groove 2","kit:GM Groove 3","kit:GM TeCnO 6","kit:GM TeCnO 7","kit:GM TeCnO 8","tec:Z-PlaneChord","hit:Expensive","hit:Sweet Maj7 1","bpm:Pad Sequence","syn:Micro Dream","amb:Soft to Lead","kit:GM 909-2 HH2","sfx:Emu TeCnO","sfx:Proteus 2000","tec:Velo Sync","bas:T-Be Pulsy 1","tec:Super Juno 1","hit:TeCnO Major2","syn:Tune Wood","tec:Velo PWM 2","bas:Digital Wave","vox:Ya How Split","sfx:Time Travel","sfx:Spectr Waves","syn:Prophet Sync","pad:Soft Rise","bas:Bottle Octav","pad:Z-Plane 2000","hit:TeCnO Major5","hit:BE Minor 1","bas:Square it","sub:Fend Mini","bas:Fend Reso","bpm:Z-Plane Trip","prc:VintageMetal","amb:Sea Flutes","sub:Rogua Deep","sfx:Reso Dive 1","bas:Rogue Da","hit:Big Minor 3","hit:Soft Major 2","wnd:Bottle Me","hit:Prophecies","sfx:Sha Dive","hit:Amb Minor 1","hit:Amb Minor Re","pad:Water Lake","kit:GM 909-1 HH1","kit:GM CR-78 1","kit:GM Dance 1","kit:GM Dance 2","kit:GM TeCnO 1","kit:GM TeCnO 2","kit:GM 808 Hip 1","kit:GM 808 Hip 2","kit:GM Dance 3","kit:GM Dance 4","kit:GM Dance 5","kit:GM TeCnO 3","kit:GM TeCnO 4","kit:GM TeCnO 5","amb:Human Dive","bas:To B@SS","bas:Mini Dow","bas:T-Be Sawy 2","tec:Swap Lead","syn:Waves Rising","bas:TeC B@SS Oct","bas:TeC Layer","bas:TeC Attack","sub:Low B@SS","bas:To Puls","bpm:Org Sequence"],
+    ["bas:To B@SS 2","bas:To B@SS 3","bas:To B@SS 4","bas:Dofty","org:Dancy 2","org:Dancy 3","org:Dancy 4","org:Dancy 5","org:Dancy 6","org:Dancy 7","org:Dancy 8","org:Dancy 9","org:Dancy 10","org:Dancy 11","org:Dancy 12","org:The Dance","org:Filtrosa","org:Syntha","org:Deep Fi-Bass","org:Bliss Filter","org:Major Chord","org:Minor Chord","org:Major Chord2","org:Minor Chord2","org:Drop Dance","org:Kraft Work","prc:Disco BD","bas:SH-101 1","sfx:Music by ...","bpm:Compute Me","bas:Fend Reso 2","bas:Mini XX","tec:Dutch Filtro","syn:Hall Synth","tec:Inspector","bas:To-Mo Bass","orc:Pizzicato","bas:To Low Bass","sub:Digital Deep","syn:Juno Dance 2","bpm:Octave Movy","hit:Big Minor 1","bpm:WoWoW Me","hit:Amb Minor 2","tec:Spiriment","sfx:Reso Dive 4","orc:Pizzicato Oc","orc:TeC Pizzi 1","orc:TeC Pizzi 2","orc:TeC Pizzi 3","orc:TeC Pizzi 4","sub:Prophet Deep","bas:T-Be Sawy 3","pad:Soft Proteus","bas:Mini Q","vox:Aa Ie Deep","tec:Watch Out","bas:T-Be Sawy 4","vox:Ten Sea Sea","sfx:Prophet Swap","tec:Phase Thin","vox:Oie The Moi","vox:Oie","vox:Moi","hit:Big Minor 4","hit:Happy Major1","hit:Happy Major2","kit:TeCnO 4 #4","kit:TeCnO 5 #3","kit:TeCnO 6 #3","kit:TeCnO 6 #4","hit:Happy Major4","hit:TuT Minor 2","hit:TuT Minor 3","wnd:Bottle Two","hit:TeC Maj Pizz","tec:Dominate","sfx:Tune Tectos","sfx:Hollow Noise","sfx:The Dutch","sfx:DJ re Loop","sfx:Weirdo Cymb","syn:PPG my Bell","hit:Big Minor 2","hit:Soft Major 1","hit:TeCnO Major1","hit:TeCnO Major3","hit:TeCnO Major4","hit:Sweet Maj7 2","hit:Sweet Maj7 3","hit:Sweet Maj7 4","hit:BE Minor 2","hit:Soft Major 3","sfx:Reso Dive 2","tec:Watch Two","syn:Pizzi Ahay","org:Silly","org:Silly Two","org:Hybride","sfx:Reso Dive 3","hit:The end..","kit:909-2 Dance","kit:909-3 Dance","kit:909-4 Dance","kit:909-5 Dance","kit:909-6 Dance","kit:909-7 Dance","kit:909-8 Dance","kit:909-9 Dance","kit:909-10 Dance","kit:909-11 Dance","kit:909 BD proce","kit:909 BD clean","wnd:Bottle Veloc","kit:GM 909-1 HH2","kit:GM 909-2 HH1","kit:GM 909-3 HH1","kit:GM 909-3 HH2","sfx:Breath","bas:Da Moogy","bas:Da Moogy Tec","sub:Low Da Moogy","bas:Da Attack","syn:Flangy Da","bas:Bottle","wnd:Panflute Vel","kit:TeCnO 1","kit:TeCnO 1 #2"],
+    ["kit:TeCnO 2","kit:TeCnO 2 #2","kit:TeCnO 3","kit:TeCnO 3 #2","kit:TeCnO 4 #2","kit:TeCnO 5","kit:TeCnO 5 #2","kit:TeCnO 6","kit:TeCnO 6 #2","kit:TeC Percus 2","pad:PolyMoogy I","bpm:Filter Seq 1","bas:Vocalize","pad:5th Station","bas:Sub Attack","bas:Down Bass","kit:TeC BD 1mono","kit:TeC BD 2mono","kit:TeC BD 3mono","kit:TeC BD 4mono","kit:TeC BD 5mono","kit:TeC BD 6mono","kit:Noise Hits 2","kit:Noise Hits 3","kit:NoiseH.velo1","kit:NoiseH.velo2","kit:NoiseH.velo3","tec:Trance I Whl","pad:Zzzz Pad","syn:Loner","tec:Velo Dorga","tec:Cotcha Dance","syn:Wave Bell","syn:Layer Me","bas:Tracker","syn:Guitar Pads","pad:Tradition","bas:Dokter SH101","pad:Far East Sun","tec:Velo PWM 3","tec:Trance Later","bas:Nasty One","vox:Noisy Aah","syn:Super Mars","bpm:HMTL Synth","syn:MegaFiltoros","tec:Trance Now","pad:Logos","tec:Venga Lady","tec:Velocity Mo","bas:Za Stronger","sub:Sub Organo","tec:Dirtylize","amb:Valley Pad","sub:Low Swing","bpm:Puls Show","syn:Classic Rise","bpm:8 oscillator","pad:SuperNova","tec:Sequenca","pad:Syntha Choir","bpm:Fun-2-U Seq","tec:Trance Wheel","amb:Dream Saws","tec:Trance On","pad:Far To Soft?","sfx:White BPM","amb:Evening Pad","tec:To Be Or Not","bas:Early Razer","bpm:Feature Show","amb:Schulze 1977","bpm:Slit Rythmn","pad:Phasalon","bpm:Waveron","kit:GM TeCnO 10","amb:Galactic End","bpm:E-mu Lize","syn:Super Layer","amb:Dream Vibes","pad:Chorusy","tec:Club Lead II","bas:Be Square II","bas:Da Lowa","tec:Voltage Lead","sfx:Water @ Mars","sfx:Fiction It","tec:Industial","bpm:Time Vox Pad","tec:Club Lead I","bpm:Mover Rogue","pad:DJAlka Lady","bpm:Wave to Pad","bas:Balled Bass","syn:P-5 Brass","tec:Jazz Lead I","tec:Whl Trance 1","pad:PolyMoogy II","hit:Minor C++","wnd:Syntho Panfl","amb:Empty@Fields","hit:midi clocky","bas:Simple Sawer","syn:Velvet Lead","bas:Mini XX / I","pad:Panfluto","bpm:Time MetaPad","kit:GM Grunche 1","pad:Steeper I","org:Cool Stack","bas:To Puls On","bas:T-Be Digi 1","org:Bass Dancer","pad:Synth Choir+","bpm:Accento Pad","pad:DJAlka Phase","tec:Tranco Lead","tec:Whl Trance 2","pad:Z-Plane Fall","tec:Dirtylize II","bas:Phat On","pad:MegaLayer I","bpm:System 55","prc:Finger snap","prc:Tambourine","kit:Drum&Bass 1","prc:Shaky LoopC4","prc:Super BD"],
+    ["arp:Dutch Dance","pad:Emulator I","arp:PanBell","arp:Uglylizon","prc:TeC Clap 1st","prc:TeC Clap 1","prc:TeC Clap 2st","prc:TeC Clap 2","prc:TeC Clap 3","prc:TeC Clap 4st","prc:Reverse CLP1","prc:Reverse CLP2","prc:80s Clap 1st","prc:80s Clap 1","prc:TeC Clap 5","prc:TeC Clap 6","prc:TeC Clap 7","prc:808 Clap 1st","prc:808 Clap 1","prc:909 CLP+Revs","prc:Reso Squeek1","prc:Reso Squeek2","prc:Reso Squeek3","prc:Reso Squeek4","prc:Reso Squeek5","sfx:Reso Dive Me","sfx:Vintage Perc","prc:MS20 Bongos1","prc:MS20 Bongos2","arp:ProtoWave","arp:T-S-C-Y","prc:TeC Snare 3","bpm:Layer Rhythm","arp:Shallow Tech","arp:Move-Z","arp:Wide Stereo","arp:T-Be Razor","arp:Tooth Quence","sfx:FictionPlace","arp:T-DigiPuls 1","arp:TSCY chord","arp:TSCY T-Bee 1","arp:Real Timer","arp:Whl.Trancy 1","amb:Cave search","arp:Velocity BP1","arp:B-passer 1","tec:Tech Radar 2","pad:Daydreamer","arp:RumbleGroove","arp:Zoo Field","arp:Seqencer Led","arp:TeC O Quence","arp:PanflutoMove","arp:Bottlesync","pad:Orbitolon","arp:Doweron","arp:TSCY T-Bee 2","arp:DreamChord 2","arp:Digi Shallow","arp:Es-Ha 101 1","arp:Bass Ooh one","arp:Syncolon","arp:OrbiterWave","arp:SH-One O One","arp:Chase Trance","kb2:EP with Pad","arp:DJalka Chord","arp:T-Be Rogue","pad:MegaLayer II","arp:Voltage Tech","arp:Dance Floor","arp:Noise Seq 1","amb:Wave Orbit","arp:Noise Seq 2","arp:Bass&Clavi","pad:Phase Orbit","arp:Chord Tech 1","arp:T-DigiPuls 2","arp:SH-One O Two","sfx:dangerzone","arp:Chord Tech 2","pad:Silk water","tec:Seq Juno Bas","arp:B-passer 2","bpm:Accento Pad2","bas:Sub Attack 2","pad:Steeper II","syn:Harpsidigi","sfx:TechBoom C4","sfx:Lazer Guns 1","pad:Square !!","prc:Brush noiser","org:Perc Stack","arp:Moogion","sfx:VintageRetro","prc:Lazer Guns 2","sfx:RisingNoise1","arp:Vox Field","arp:Whl.Trancy 2","sfx:RisingNoise2","prc:H-SN C2/C4 1","prc:H-SN C2/C4 2","prc:H-SN C2/C4 3","prc:TjaTjow C2C4","prc:Tech Snare","arp:Whl.Trancy 3","sfx:Spectrumize","syn:After Flutes","syn:Known Fifth","led:Soft Aahs","led:Carnival","hit:TuT Minor 1","bas:The X Seven","bpm:Beam me Up","pad:Blue Sky","hit:BE MinorPizz","bpm:Pad to fase","led:Terra Luna","bpm:Time Vox","sfx:Orwell","bpm:Rocket Ship","bpm:Weird Song","led:Dance Diva","led:Rodin's Knee","sfx:Freak Out","snd:by Rob Papen",":TemplateV2.0"],
+  ] },
+  { id: "BEAT", name: "Beat Garden", msb: 67, source: "Orbit-3 Operation Manual Rev. A", banks: [
+    ["bts:Beat Garden","bas:Beat Square","syn:Tulip Bells","vox:FlowerBed","bts:Disco Garden","bts:RnB Flower 2","bas:Oak Tree","git:Riff me 2","pad:DestyFlower1","bas:Bamboe DJ","arp:Beat Flache","sub:LowerMeBass1","pr1:Percussion 1","pr2:Percussion 2","pr3:Percussion 3","sn1:Snares 1 St.","sn2:Snares 2mono","sn3:Snares 3 St.","sn4:Jungle SN St","sn5:Jngl SN St+M","sn6:Elec SN 1mon","sn6:Elec SN 2 St","sn6:Elec SN 3","sn6:Elec SN 4","sn7:Elec SN+CLP1","clp:Claps St. 1","clp:Claps St+M.1","clp:Claps Stack1","bd1:BG BD 1","bd1:BG BD room 2","bd2:BG BD Elec 1","bd2:BG BD Elec 2","hh1:HiHats monoI","cb1:Cymb&Rides 1","cb2:Cymb&Rides 2","tom:Beat Toms","kit:Jazz & Bass","sfx:Beat Field 1","sfx:Beat Field 2","git:Riff me 1","syn:XyloSynth D","amb:Snowy Trees","bas:Slap it 1cho","sfx:Special & Dr","syn:Angel Sword","git:Muted Alka","bas:Jungle GSM","pad:GardenString","bas:PhatSawer","amb:Angel Pad","led:Funky Plant","kb2:Aurora","bts:Z-planer","bts:Filter Disco","bts:Slowa","pad:Silk Padings","bas:Analoga Tree","syn:Chimy Pad","bts:Rock Garden","bts:Tulip Garden","bas:Saw Leaves","bts:Post groove","bts:Hi Temp","pad:Artic Sweep","bas:Spruce","sfx:SF Chimes","bts:Jungle Eyes","bts:ScottsValley","bts:Low Rider","bts:Swing Garden","bas:Swing Garden","bts:Fantasy","bas:Acous-Syn 5","pad:Versatility","bas:Voca T-Bee","bts:Park groove","arp:M-Es Twenty","vox:Fab Syntha","bts:DnB Garden","git:Plectrum-B","kb2:Butterfly","bas:Balled","hit:Newish II","syn:PlantoDance","arp:Beat Chord 1","pad:Gardensynth","arp:T-Beat 1","bas:Wild Plant","vox:Big BG Choir","syn:Garden Party","hit:@ BeatGarden","bts:Moveda Floor","bas:Cactus VI","pad:Dramatique","bts:SFX Garden","brs:Beat Section","syn:Beat Sweep 1","arp:git C3-C6 1","arp:git C1-C4 1","bas:Dream Tree","hit:SF Garden","arp:Beat Chord 2","bas:Flip Trance","bts:ElectroField","bts:Brush Garden","bas:Acous-Syn 4","pad:Bombasticom","arp:Velo Garden2","pr1:BPM LF0 1","pr2:BPM LFO 1","pr3:BPM LFO 1","sfx:Big Break C4","bas:24dB Plant","vox:Open Flower","bas:JD-Stack IX","pad:FlowerFields","arp:git C3-C6 2","arp:git C1-C4 2","bts:Shake Garden","bts:Oak groove","bts:GroovyGroove","bas:Pick S it Is","pad:Morning","bts:DnB Warp","bts:RnB Flower 1","syn:Garden Stab","bas:Slap a Synth","bpm:Mars Garden?"],
+    ["pr1:Cajon 1","pr1:BeatRing 1","pr1:BeatRing 2","pr1:BeatRing 3","pr1:BeatRing 4","pr1:Cabasa 1","pr1:Cowbells 1","pr1:Egg E4-G4 1","pr1:Egg D4-D#4 1","pr1:Egg A#4-C5 1","pr2:Djembe gr1","pr2:Djembe gr4","pr2:BigM Shaker1","pr2:SleighBell 1","pr2:Agogo bells1","pr2:FingerCymb 1","pr2:Bongos 1","pr2:Congas 1","pr2:Congas 2","pr2:Tumba fx 1","pr3:Triangle 6 1","pr3:Triangle 9 1","pr3:Shaker Mid 1","pr3:Shaker Mid 2","pr3:Shaker Plas2","pr3:Shaker Plas3","pr3:Ganzeiro 2","pr3:Ganz.Shaker1","pr3:Ganz.Shells1","pr3:Udo 1","pr3:Caxici DBL 1","pr3:Caxici DBL 2","pr3:Caxici DBL 3","pr3:Tarine 2","pr3:Tarine 3","pr3:Tambourim 1","pr3:Tambourine 2","pr3:Shekere 1","pr3:Crash Box 1","prc:Xylophone","syn:GardenStack1","sub:AcoustyLow","bas:Slap it 1","bas:Marc One Cho","syn:Click N Bass","pad:Artic White","org:Organ&Bass","hh1:HiHats poly","sub:LowerMeBass2","arp:Beat U-know1","git:Riff me 3","bas:Sl+Pull1 F#1","bas:Sl+Pull2 F#1","pad:SolinaString","bas:Udo Frame I","git:Muted Meaty","syn:XyloSynth C","led:Funky Tree","bas:Spruce Leaf","vox:Botanic","syn:RnB Stab","sfx:FightDrum","led:Aurora Flute","syn:TumbaLa Bass","arp:T-Beat 2","pad:DestyFlower2","bas:Dorn @ Plant","pad:Faling2Leave","git:Muted","syn:Djembe Toys","arp:Velo Garden1","vox:BG singers","bas:Spruce Color","pad:Romarin","led:Beat da bass","kb2:Garden keys","sub:Deep Forest","pad:VocaleOrgan","bas:Park II","syn:RnB Bell I","bas:JD-Stack I","bpm:Evening Vox","syn:Nippon","hit:Newish I","bas:OrganTube","arp:Cords Tree","syn:Big Section","pad:Bowed Angel","bas:Acacia Shade","pad:Artic Voices","syn:Pro-Teusion","bas:Acoustic","git:Muted Bliss","prc:Xylo-Udo","vox:Synthamike I","bas:Distal","arp:git C3-C6 1W","arp:git C1-C4 1W","arp:git C3-C6 2W","arp:git C1-C4 2W","arp:git C3-C6 3W","arp:git C1-C4 3W","arp:git C3-C6 4W","arp:git C1-C4 4W","arp:git C3-C6 5W","arp:git C1-C4 5W","arp:git C3-C6 6W","arp:git C1-C4 6W","arp:git C3-C6 7W","arp:git C1-C4 7W","arp:git C3-C6 8W","arp:git C1-C4 8W","arp:git C3-C6 3","arp:git C1-C4 3","arp:git C3-C6 4","arp:git C1-C4 4","arp:git C3-C6 5","arp:git C1-C4 5","arp:git C3-C6 6","arp:git C1-C4 6","arp:git C3-C6 7","arp:git C1-C4 7","arp:git C3-C6 8","arp:git C1-C4 8","arp:git C3-C6 9","arp:git C1-C4 9","arp:git C3-C6 T","arp:git C1-C4 T"],
+    ["sfx:a cold wind","bas:Jungle GSM 2","arp:Film Chaser","git:Muted Rave","arp:T-Beat 3 Mwl","sfx:Djembe I","arp:Velo Garden3","hit:Newish IV","vox:Thin Leaves","bas:PWM Cajon","pad:Eastern Wind","syn:Ting Shells","bas:Udo Octave","pad:Phasing Tree","sfx:NovaZembla 2","syn:ScottsValley","bas:Jungle Nok","pad:PlantoVox","hit:Radio W Beat","pad:Tilleul","sfx:DSP chat","arp:MdWhl Trance","bas:SynthaConga","arp:PlasticWheel","arp:SlapYourKeys","sub:Pepples I","vox:Thinny-A","pr1:BPM LF0 2","pr1:BPM LF0 3","pr1:BPM LF0 4","pr1:BPM LF0 5","pr1:BPM LF0 6","bas:Mahony I","syn:Club Opener","arp:Com Plex","bas:Analoga Puls","arp:Beat O-Phat","sfx:Djembe Oct.","vox:Next 2 Organ","arp:Stereo Movie","bas:SQR laChorus","pr2:BPM LFO 2","pr2:BPM LFO 3","pr2:BPM LFO 4","pr2:BPM LFO 5","pr2:BPM LFO 6","vox:Gardenlized","arp:SlapPull F#1","bas:Mahony II","syn:RnB Bell IV","arp:Beat Chord 1","pad:Epicea","bas:Djembe Udo I","pad:Sweep it up","sub:Pepples II","pr3:BPM LFO 2","pr3:BPM LFO 3","pr3:BPM LFO 4","pr3:BPM LFO 5","pr3:BPM LFO 6","bas:Cajon&Udo","syn:XyloSynth C","arp:Epicea Bass","syn:Obie CanObie","bas:Mahony III","vox:Deep Aahs I","arp:Tuber B Mute","bas:Deep Trance","bas:TumbaConga","arp:Pick a Synth","pad:Faling Leave","sfx:Dig Scratch1","sfx:Dig Scratch2","led:Sunflower","bas:Click a Bass","vox:Hi Lady","led:Hi Trumpet","arp:Cyber Plant","bpm:Alien Park","syn:XyloSynth B","bas:Cajon MarkII","sfx:starfighter","vox:FlowerSmell","bas:Saw laChorus","bas:Djembe Frame","pad:Vocoderlon","git:Muted Flanga","hit:Newish Octav","arp:Seek Quence","syn:Obie Plant","syn:My BelloBell","sfx:Tuned Frame","arp:Beat U-know2","pad:Lavende","arp:Velo Garden3","syn:Moveda Floor","led:Mini Plant","syn:Iceland","sfx:Beat Field 3","sfx:Beat Field 4","arp:Turn a knob","sn6:Elec SN 5 St","sn6:Elec SN 6 St","sn6:Elec SN 7 St","sn1:Snares 1 FX","sn1:Snares 2 FX","bas:Slowa Deep","sfx:Dig Scratch4","sfx:Dig Scratch5","bas:Lower Swing","bas:Shake Garden","amb:Dawning","sfx:Beat Field 5","sfx:Beat Field 6","bas:Ace of Saw","pad:Meta Macro","git:Plectrum-A","bas:RnB Flower 1","led:Pulsy Plant","git:Muted Switch","git:Plectrum-F","bas:Puls Number5","sub:SinusMoogy","bpm:E-mu Garden","git:Plectrum-Q","bas:RnB Flower 2","kit:Riff set","syn:RnB BellXylo"],
+    ["bas:Marc One","bas:Marc Three","bas:Marc & Synth","bas:Marc Six","bas:Marc Five","bas:Marc Middy","sfx:Alien Steps","bas:Pick Chorus","bas:Sweep Leaf","arp:T-Beat 4 Mwl","bas:JD-Stack II","bas:JD-Stack III","bas:JD-Stack IV","bas:JD-Stack V","bas:JD-Stack VI","bas:JD-StackVII","bpm:Botanic Rain","bas:Distal II","bas:SpeakFlower","bas:Deja Vu I","pad:E-motion","bas:Coniferae","bas:Vibirnum","bas:T-Beat","bas:Elm Tree","bas:AttackChorus","bas:Cactus I","bas:Acous-Syn 1","bas:CajonFrame","sfx:digital H2O","arp:Velo Garden2","hit:Newish Phat","bas:Marc One Two","sub:Dark Earth","bas:Creamy Palm","sub:Underclick","bas:Four Voice","bas:Cactus II","bas:Acous-Syn 2","sub:PulsyMoogy","prc:Tuned Cajon","bas:Cajon Stack","pad:Bowed Flower","sfx:Huh of Jon","sfx:Yell of Jon","sfx:Nice drink !","sfx:Tuned Tube","vox:FemalaSpace","bas:Spruce Robes","bas:Deja Vu II","bas:PhataTubes","bas:Cactus III","sub:Dark Forest","bas:Acous-Syn 3","bas:Jungle GSM 3","vox:Deep Aahs II","sfx:Tumba Tuned","sfx:Tuned Shells","sfx:Doppler FX 1","sfx:Doppler FX 2","sfx:Groove Click","vox:ThinnyHigh","sfx:GardenChimes","pad:Stack 4 U","bas:Spruce Top","bas:AcaciaChorus","pad:Reso Fields","bas:AttackDeeper","sub:Deep Pedal","bas:Djembe UdoII","sfx:La La synth","sfx:X-LoFi Snare","sfx:X-Voca Snare","sfx:X-Meta Snare","sfx:Door Snare","sfx:Broken Door","sfx:NovaZembla 1","vox:ThinnyOrgan","sfx:Doppler FX 3","sfx:Doppler FX 4","arp:Puls Plant","bas:Cactus IV","bas:Organ&Udo","bas:Acous-Syn 6","bas:Udo","vox:FemalaSynth","sfx:SF bug","sfx:SF bug ST","sfx:FightDrum M","vox:A Big Aah","syn:OvertoneBell","led:Garden Flute","prc:Frame Drum","prc:Tuned Conga","prc:TunedQuinto1","prc:TunedQuinto2","bas:Cactus V","bas:5th Organ","bas:Acous-Syn 7","sub:SawyMoogy","vox:FemalaHiss","syn:RnB Bell II","prc:Tumba Wuha","prc:Tumba Plop","prc:TunedDjembe1","prc:TunedDjembe2","prc:Tuned Udo FX","prc:Tuned Sizzle","prc:Tuned China","prc:Tuned Sleigh","syn:Snaro Wood","sfx:Tumba & More","sub:Wood","bas:CajonSawer","bas:Udo Frame II","vox:FemalaDream","sfx:DeepSpring 1","sfx:DeepSpring 2","bas:Park I","hit:Radio W Big","syn:Bass a Wood","prc:Tuned BassDr","pad:Eucalyptus","arp:Hi Tech Tree","syn:RnB Bell III","sfx:NovaZembla 3","vox:OrganVocals",":TemplateV1.0"],
+  ] },
+];
+</script>
+<script>
+(() => {
+  const $port = document.getElementById('port');
+  const $channel = document.getElementById('channel');
+  const $rom = document.getElementById('rom');
+  const $search = document.getElementById('search');
+  const $type = document.getElementById('type');
+  const $clear = document.getElementById('clear');
+  const $banks = document.getElementById('banks');
+  const $presets = document.getElementById('presets');
+  const $results = document.getElementById('results');
+  const $status = document.getElementById('status');
+
+  // User presets have no names yet; select them by number only.
+  const ROMS = [
+    ...P2K_ROMS,
+    { id: 'USER', name: 'User', msb: 0, user: true, banks: Array.from({ length: 4 }, () => Array(128).fill('')) },
+  ];
+
+  const TYPES = [
+    { label: 'Bass',                codes: ['bas', 'bs1', 'bs2', 'bs3', 'bs4', 'bs5', 'sub'] },
+    { label: 'Keys & Organ',        codes: ['kb1', 'kb2', 'kb3', 'kb4', 'key', 'org'] },
+    { label: 'Synth',               codes: ['syn', 'wav', 'tec'] },
+    { label: 'Lead',                codes: ['led'] },
+    { label: 'Pad',                 codes: ['pad'] },
+    { label: 'Ambient',             codes: ['amb'] },
+    { label: 'Arpeggio',            codes: ['arp'] },
+    { label: 'Tempo-synced',        codes: ['bpm', 'clk'] },
+    { label: 'Strings & Orchestra', codes: ['str', 'orc'] },
+    { label: 'Brass & Wind',        codes: ['brs', 'wnd'] },
+    { label: 'Guitar',              codes: ['gtr', 'git'] },
+    { label: 'Vocals',              codes: ['vox'] },
+    { label: 'Hits',                codes: ['hit'] },
+    { label: 'Beats',               codes: ['bts'] },
+    { label: 'Drum kits',           codes: ['kit'] },
+    { label: 'Percussion',          codes: ['prc', 'pr1', 'pr2', 'pr3'] },
+    { label: 'Single drums',        codes: ['bd1', 'bd2', 'sn1', 'sn2', 'sn3', 'sn4', 'sn5', 'sn6', 'sn7', 'hh1', 'cb1', 'cb2', 'clp', 'tom'] },
+    { label: 'FX, Noise & Scratch', codes: ['sfx', 'nse', 'scr'] },
+  ];
+
+  let midiAccess = null;
+  let romIdx = 0;
+  let bankIdx = 0;
+  let active = null; // { rom, bank, pc } of the last preset sent
+
+  function splitPreset(s) {
+    const i = s.indexOf(':');
+    return { cat: s.slice(0, i), name: s.slice(i + 1) };
+  }
+
+  const INDEX = [];
+  ROMS.forEach((rom, r) => {
+    if (rom.user) return;
+    rom.banks.forEach((bank, b) => bank.forEach((p, pc) => {
+      const { cat, name } = splitPreset(p);
+      INDEX.push({ r, b, pc, cat, hay: (cat + ' ' + name).toLowerCase() });
+    }));
+  });
+
+  const grouped = new Set(TYPES.flatMap(t => t.codes));
+  const otherCodes = [...new Set(INDEX.map(e => e.cat))].filter(c => !grouped.has(c));
+  if (otherCodes.length) TYPES.push({ label: 'Other', codes: otherCodes });
+
+  for (let i = 1; i <= 16; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i - 1);
+    opt.textContent = String(i);
+    $channel.appendChild(opt);
+  }
+
+  ROMS.forEach((rom, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = rom.user
+      ? 'User banks (MSB 0)'
+      : rom.name + ' — ' + rom.id + ' (MSB ' + rom.msb + ')';
+    $rom.appendChild(opt);
+  });
+
+  TYPES.forEach((t, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = t.label + ' (' + INDEX.filter(e => t.codes.includes(e.cat)).length + ')';
+    opt.title = t.codes.map(c => c || '(none)').join(' ');
+    $type.appendChild(opt);
+  });
+
+  function setStatus(msg, kind = '') {
+    $status.textContent = msg;
+    $status.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  // Numbered variants (bs1…bs5, kb1…kb4) share a hue.
+  function catColor(cat) {
+    const key = cat.replace(/\d+$/, '');
+    let h = 0;
+    for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return 'hsl(' + h + ', 55%, 68%)';
+  }
+
+  function bankCategories(bank) {
+    const seen = [];
+    for (const p of bank) {
+      const c = splitPreset(p).cat;
+      if (c && !seen.includes(c)) seen.push(c);
+    }
+    return seen;
+  }
+
+  function isActive(r, b, pc) {
+    return active && active.rom === r && active.bank === b && (pc === undefined || active.pc === pc);
+  }
+
+  function isSearching() {
+    return $search.value.trim() !== '' || $type.value !== '';
+  }
+
+  function render() {
+    renderBanks();
+    const searching = isSearching();
+    $presets.hidden = searching;
+    $results.hidden = !searching;
+    $clear.hidden = !searching;
+    if (searching) renderResults(); else renderPresets();
+  }
+
+  function clearSearch() {
+    $search.value = '';
+    $type.value = '';
+    render();
+  }
+
+  function renderBanks() {
+    const rom = ROMS[romIdx];
+    $banks.innerHTML = '';
+    rom.banks.forEach((bank, b) => {
+      const btn = document.createElement('button');
+      btn.className = 'bank-btn' + (b === bankIdx ? ' selected' : '') + (isActive(romIdx, b) ? ' has-active' : '');
+
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.append('Bank ' + b);
+      const msb = document.createElement('span');
+      msb.className = 'msb';
+      msb.textContent = rom.msb + '/' + b;
+      title.appendChild(msb);
+
+      const cats = document.createElement('div');
+      cats.className = 'cats';
+      if (rom.user) {
+        cats.textContent = 'user · ' + (b * 128) + '–' + (b * 128 + 127);
+      } else {
+        const list = bankCategories(bank);
+        cats.textContent = list.slice(0, 6).join(' · ') + (list.length > 6 ? ' …' : '');
+        cats.title = list.join(' · ');
+      }
+
+      btn.append(title, cats);
+      btn.addEventListener('click', () => { bankIdx = b; clearSearch(); });
+      $banks.appendChild(btn);
+    });
+  }
+
+  function presetButton(r, b, pc, numText) {
+    const rom = ROMS[r];
+    const btn = document.createElement('button');
+    btn.className = 'preset' + (isActive(r, b, pc) ? ' active' : '');
+    btn.addEventListener('click', () => sendPreset(r, b, pc));
+
+    if (rom.user) {
+      btn.classList.add('numonly');
+      btn.textContent = String(pc);
+      btn.title = 'User bank ' + b + ' #' + pc;
+      return btn;
+    }
+
+    const { cat, name } = splitPreset(rom.banks[b][pc]);
+    btn.title = rom.id + ' bank ' + b + ' #' + pc + '  ' + cat + ':' + name;
+    const num = document.createElement('span');
+    num.className = 'num' + (numText.length > 3 ? ' wide' : '');
+    num.textContent = numText;
+    const c = document.createElement('span');
+    c.className = 'cat';
+    c.textContent = cat;
+    c.style.color = catColor(cat);
+    const n = document.createElement('span');
+    n.className = 'name';
+    n.textContent = name;
+    btn.append(num, c, n);
+    return btn;
+  }
+
+  function renderPresets() {
+    $presets.innerHTML = '';
+    for (let pc = 0; pc < 128; pc++) {
+      $presets.appendChild(presetButton(romIdx, bankIdx, pc, String(pc)));
+    }
+  }
+
+  function renderResults() {
+    const tokens = $search.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const type = $type.value === '' ? null : TYPES[parseInt($type.value, 10)];
+    const hits = INDEX.filter(e =>
+      (!type || type.codes.includes(e.cat)) && tokens.every(t => e.hay.includes(t)));
+
+    const perRom = new Map();
+    for (const e of hits) perRom.set(e.r, (perRom.get(e.r) || 0) + 1);
+
+    $results.innerHTML = '';
+    const summary = document.createElement('div');
+    summary.className = 'results-summary';
+    summary.textContent = hits.length
+      ? hits.length + (hits.length === 1 ? ' match' : ' matches') + ' · click to send · Esc to clear'
+      : 'No presets match.';
+    $results.appendChild(summary);
+
+    let grid = null;
+    let lastRom = -1;
+    for (const e of hits) {
+      if (e.r !== lastRom) {
+        lastRom = e.r;
+        const h = document.createElement('h2');
+        h.textContent = ROMS[e.r].name + ' · ' + ROMS[e.r].id + ' · ' + perRom.get(e.r);
+        grid = document.createElement('div');
+        grid.className = 'result-grid';
+        $results.append(h, grid);
+      }
+      grid.appendChild(presetButton(e.r, e.b, e.pc, e.b + '·' + e.pc));
+    }
+  }
+
+  function refreshPorts() {
+    if (!midiAccess) return;
+    const prev = $port.value;
+    $port.innerHTML = '';
+    const outs = [...midiAccess.outputs.values()];
+    if (outs.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '— No MIDI outputs found —';
+      $port.appendChild(opt);
+      return;
+    }
+    for (const out of outs) {
+      const opt = document.createElement('option');
+      opt.value = out.id;
+      opt.textContent = out.name + (out.manufacturer ? ' (' + out.manufacturer + ')' : '');
+      $port.appendChild(opt);
+    }
+    if (prev && outs.some(o => o.id === prev)) $port.value = prev;
+  }
+
+  function sendPreset(r, b, pc) {
+    const portId = $port.value;
+    if (!portId) { setStatus('No MIDI output selected', 'err'); return; }
+    const out = midiAccess && midiAccess.outputs.get(portId);
+    if (!out) { setStatus('Selected MIDI output unavailable', 'err'); return; }
+
+    const rom = ROMS[r];
+    const ch = parseInt($channel.value, 10) & 0x0f;
+    try {
+      out.send([0xB0 | ch,  0, rom.msb]); // CC 0  — Bank Select MSB (ROM ID, 0 = User)
+      out.send([0xB0 | ch, 32, b]);       // CC 32 — Bank Select LSB (bank in ROM)
+      out.send([0xC0 | ch, pc]);          // Program Change
+    } catch (e) {
+      setStatus('Send failed: ' + e.message, 'err');
+      return;
+    }
+
+    // Follow the sent preset so the bank view shows where it lives.
+    active = { rom: r, bank: b, pc };
+    romIdx = r;
+    bankIdx = b;
+    $rom.value = String(r);
+    render();
+
+    const label = rom.user ? '' : ' ' + rom.banks[b][pc] + ' ';
+    setStatus(rom.id + ' bank ' + b + ' #' + pc + label +
+      ' (MSB' + rom.msb + ', LSB ' + b + ', PC ' + pc + ') ch ' + (ch + 1) + ' → ' + out.name, 'ok');
+  }
+
+  $rom.addEventListener('change', () => {
+    romIdx = parseInt($rom.value, 10);
+    bankIdx = Math.min(bankIdx, ROMS[romIdx].banks.length - 1);
+    clearSearch();
+  });
+  $search.addEventListener('input', render);
+  $type.addEventListener('change', render);
+  $clear.addEventListener('click', clearSearch);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && isSearching()) { e.preventDefault(); clearSearch(); }
+  });
+
+  render();
+
+  if (!navigator.requestMIDIAccess) {
+    setStatus('Web MIDI not supported in this browser. Use Chrome, Edge, Opera or Firefox 108+ (Safari has no Web MIDI).', 'err');
+    return;
+  }
+
+  navigator.requestMIDIAccess({ sysex: false }).then(access => {
+    midiAccess = access;
+    refreshPorts();
+    access.onstatechange = () => {
+      refreshPorts();
+      setStatus('MIDI ports updated');
+    };
+    if (access.outputs.size > 0) {
+      setStatus('Ready. ' + access.outputs.size + ' output(s) found.', 'ok');
+    } else {
+      setStatus('MIDI ready, but no outputs are connected.', 'err');
+    }
+  }).catch(err => {
+    setStatus('MIDI access denied: ' + err.message, 'err');
+  });
+})();
+</script>
+</body>
+</html>
