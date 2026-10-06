@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sea Change core tests</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, Menlo, monospace; margin: 20px; background: #111; color: #ddd; }
+  .ok { color: #4c8; } .fail { color: #f66; font-weight: bold; }
+  #summary { margin-top: 12px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h3>p2k-core / p2k-data tests</h3>
+<div id="out"></div>
+<div id="summary"></div>
+<script src="p2k-roms.js"></script>
+<script src="p2k-data.js"></script>
+<script src="p2k-core.js"></script>
+<script>
+"use strict";
+const out = document.getElementById("out");
+let failures = 0, passes = 0;
+function t(name, cond, detail) {
+  const div = document.createElement("div");
+  div.className = cond ? "ok" : "fail";
+  div.textContent = (cond ? "PASS  " : "FAIL  ") + name + (cond ? "" : "  — " + (detail || ""));
+  out.appendChild(div);
+  if (cond) passes++; else failures++;
+}
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const bytes = (a) => Array.from(a);
+const hx = (a) => P2KC.hex(a);
+
+/* 14-bit numbers: the spec's worked examples */
+t("enc14(-127) = 01 7F", eq(P2KC.enc14(-127), [0x01, 0x7f]));
+t("enc14(257) = 01 02", eq(P2KC.enc14(257), [0x01, 0x02]));
+t("enc14(-1) = 7F 7F (edit buffer)", eq(P2KC.enc14(-1), [0x7f, 0x7f]));
+t("dec14 round-trips -8192..8191", (() => {
+  for (let v = -8192; v < 8192; v++) { const [l, m] = P2KC.enc14(v); if (P2KC.dec14(l, m) !== v) return false; }
+  return true;
+})());
+
+/* checksum: 1's complement of the 7-bit sum */
+t("checksum", P2KC.checksum([1, 2, 3, 100, 127], 0, 5) === (~(1 + 2 + 3 + 100 + 127) & 0x7f));
+
+/* message builders — byte layouts as Edisyn/prodatum send them */
+t("param edit: preset select = edit buffer",
+  hx(P2KC.paramEdit(0, [[897, -1]])) === "F0 18 0F 00 55 01 02 01 07 7F 7F F7", hx(P2KC.paramEdit(0, [[897, -1]])));
+t("param edit: multimode ROM id = 0 (prodatum's re-enable message)",
+  hx(P2KC.paramEdit(0, [[138, 0]])) === "F0 18 0F 00 55 01 02 0A 01 00 00 F7");
+t("param edit: two params, count = 4",
+  hx(P2KC.paramEdit(3, [[898, 2], [1410, -96]])) === "F0 18 0F 03 55 01 04 02 07 02 00 02 0B 20 7F F7",
+  hx(P2KC.paramEdit(3, [[898, 2], [1410, -96]])));
+t("param request", hx(P2KC.paramRequest(0, [139, 385])) === "F0 18 0F 00 55 02 02 0B 01 01 03 F7");
+t("edit-buffer dump request (closed loop)",
+  hx(P2KC.presetDumpRequest(0, -1, 0, true)) === "F0 18 0F 00 55 11 02 7F 7F 00 00 F7");
+t("preset dump request: Composer #300, open loop",
+  hx(P2KC.presetDumpRequest(0, 300, 4, false)) === "F0 18 0F 00 55 11 04 2C 02 04 00 F7");
+t("name request: user preset 5", hx(P2KC.nameRequest(0, 1, 5, 0)) === "F0 18 0F 00 55 0C 01 05 00 00 00 F7");
+t("ACK packet 0", hx(P2KC.ack(0, 0)) === "F0 18 0F 00 55 7F 00 00 F7");
+t("EOF", hx(P2KC.eof(0)) === "F0 18 0F 00 55 7B F7");
+
+/* classify */
+{
+  const m = P2KC.classify(P2KC.paramEdit(0, [[898, 2], [1410, -96]]));
+  t("classify param edit", m.type === "param" && eq(m.params, [[898, 2], [1410, -96]]), JSON.stringify(m));
+  const nm = new Uint8Array([0xf0, 0x18, 0x0f, 0x00, 0x55, 0x0b, 0x01, 0x05, 0x00, 0x00, 0x00,
+    ..."pad:Warm Blanket".split("").map((c) => c.charCodeAt(0)), 0xf7]);
+  const n = P2KC.classify(nm);
+  t("classify name", n.type === "name" && n.objType === 1 && n.number === 5 && n.romId === 0 && n.name === "pad:Warm Blanket", JSON.stringify(n));
+  // config: 2 general bytes (user presets 512), 4 simms x 6 bytes
+  const cfg = new Uint8Array([0xf0, 0x18, 0x0f, 0x00, 0x55, 0x09, 0x02, 0x00, 0x04, 0x04, 0x06,
+    0x04, 0x00, 0x00, 0x08, 0x15, 0x09,  0x0d, 0x00, 0x00, 0x04, 0x4b, 0x08,
+    0x41, 0x00, 0x00, 0x04, 0x61, 0x04,  0x43, 0x00, 0x00, 0x04, 0x23, 0x04, 0xf7]);
+  const c = P2KC.classify(cfg);
+  t("classify config", c.type === "config" && c.userPresets === 512 && eq(c.simms.map((s) => s.id), [4, 13, 65, 67])
+    && c.simms[0].presets === 1024, JSON.stringify(c));
+  const id = P2KC.classify(new Uint8Array([0xf0, 0x7e, 0x00, 0x06, 0x02, 0x18, 0x04, 0x04, 0x03, 0x00, 0x32, 0x2e, 0x32, 0x36, 0xf7]));
+  t("classify identity reply", id.type === "identity" && id.member === 3 && id.version === "2.26", JSON.stringify(id));
+  t("classify ignores other SysEx", P2KC.classify(new Uint8Array([0xf0, 0x43, 0x10, 0x01, 0xf7])) === null);
+}
+
+/* The real init dump: decode, then re-encode byte for byte */
+{
+  const raw = P2KC.fromHex(P2KD.INIT_SYX);
+  const msgs = P2KC.splitSysex(raw);
+  t("init dump is header + 7 packets", msgs.length === 8, msgs.length);
+  const h = P2KC.classify(msgs[0]);
+  t("init header counts (P2K firmware: 52 common params)", eq(h.counts, {
+    general: 52, arp: 19, fx: 16, link: 20, layers: 4, lgeneral: 31, filter: 3, lfo: 10, env: 42, cords: 72 }),
+    JSON.stringify(h.counts));
+  t("init header byte count = dataLength(counts)", h.bytes === P2KC.dataLength(h.counts) && h.bytes === 1494, h.bytes);
+  t("all init packets pass checksum", msgs.slice(1).every((m) => P2KC.classify(m).checksumOk));
+  const found = P2KC.presetsFromSysex(raw);
+  t("presetsFromSysex finds one preset", found.length === 1);
+  const p = found[0].preset;
+  t("init name", p.name === "   :untitled    ", JSON.stringify(p.name));
+  t("init layer 1 volume 0 dB, layers 2-4 -96 dB",
+    p.layers[0][1410] === 0 && p.layers[1][1410] === -96 && p.layers[3][1410] === -96);
+  t("init link 1 off", p.common[1281] === -1);
+  t("init FX A = Warm Room (14)", p.common[1153] === 14 && P2KD.format(1153, 14) === "Warm Room");
+  const again = P2KC.concat(P2KC.encodePreset(p, { dev: 0, number: found[0].number, romId: found[0].romId }));
+  t("init re-encodes byte-identical", hx(again) === hx(raw), "lengths " + again.length + " vs " + raw.length);
+  // 56-param (P2500-style) layout round-trips too
+  const p56 = P2KC.clonePreset(p);
+  p56.counts.general = 56; p56.common[967] = 12; p56.common[970] = -1;
+  const back = P2KC.presetsFromSysex(P2KC.concat(P2KC.encodePreset(p56, { number: 7, romId: 0 })))[0];
+  t("56-param layout round-trips", back.number === 7 && back.preset.common[967] === 12
+    && back.preset.common[970] === -1 && back.preset.counts.general === 56 && eq(back.preset.layers, p.layers));
+  // edit-buffer header
+  const eb = P2KC.encodePreset(p, { dev: 5 });
+  t("edit-buffer dump header: dev 5, number 7F 7F, open loop", hx(eb[0].slice(0, 9)) === "F0 18 0F 05 55 10 03 7F 7F", hx(eb[0].slice(0, 9)));
+  t("data packets carry 244 bytes", eb[1].length === 255 && eb[eb.length - 1].length === 11 + (1494 - 6 * 244));
+}
+
+/* closed-loop assembly: acks per packet, resent packet replaces the first */
+{
+  const p = P2KC.presetsFromSysex(P2KC.fromHex(P2KD.INIT_SYX))[0].preset;
+  p.name = "tst:Closed Loop ";
+  const msgs = P2KC.encodePreset(p, { closed: true, number: -1 });
+  const asm = P2KC.PresetAssembler();
+  const acks = [];
+  let done = null;
+  const bad = msgs[2].slice(); bad[20] ^= 1;
+  t("corrupted packet is NAKed", eq(asm.feed(P2KC.classify(msgs[0])), { ack: 0 }) && eq(asm.feed(P2KC.classify(msgs[1])), { ack: 1 })
+    && eq(asm.feed(P2KC.classify(bad)), { nak: 2 }));
+  for (const m of msgs.slice(2)) {
+    const r = asm.feed(P2KC.classify(m));
+    if (r.ack !== undefined) acks.push(r.ack);
+    if (r.done) done = r;
+  }
+  t("acks 2..7 after the NAK", eq(acks, [2, 3, 4, 5, 6, 7]), JSON.stringify(acks));
+  t("closed-loop preset decodes", done && done.number === -1 && done.preset.name === "tst:Closed Loop ");
+}
+
+/* display formulas, checked against Edisyn's tables */
+{
+  t("filter Hz table 1 ends", P2KD.filFreq(0, 20000, 1002) === 57 && P2KD.filFreq(255, 20000, 1002) === 20000);
+  t("filter Hz samples", P2KD.filFreq(100, 20000, 1002) === 669 && P2KD.filFreq(64, 18000, 1003) === 320
+    && P2KD.filFreq(200, 10000, 1006) === 3754 && P2KD.filFreq(0, 10000, 1006) === 83);
+  t("EQ gain", P2KD.morphGain(0) === "-24.0 dB" && P2KD.morphGain(127) === "+23.6 dB" && P2KD.morphGain(64) === "+0.0 dB",
+    [P2KD.morphGain(0), P2KD.morphGain(127), P2KD.morphGain(64)].join(" "));
+  t("glide secs", P2KD.glideSecs(0) === "0.000" && P2KD.glideSecs(23) === "0.046" && P2KD.glideSecs(127) === "32.738"
+    && P2KD.glideSecs(100) === "3.930", [P2KD.glideSecs(23), P2KD.glideSecs(100), P2KD.glideSecs(127)].join(" "));
+  t("note names", P2KD.noteName(0) === "C-2" && P2KD.noteName(60) === "C3" && P2KD.noteName(127) === "G8");
+  const ctx = { 1537: 0 };
+  t("cutoff shows Hz for Classic LPF", P2KD.format(1538, 255, ctx) === "20.0 kHz", P2KD.format(1538, 255, ctx));
+  t("Q shows dB for swept EQ", P2KD.format(1539, 0, { 1537: 32 }) === "-24.0 dB");
+  t("LFO rate tempo + Hz", P2KD.format(1665, -25) === "8/1" && P2KD.format(1665, 0) === "0.08 Hz");
+  t("env rate in tempo mode", P2KD.format(1794, 55, { 1793: 2 }) === "1/4" && P2KD.format(1794, 55, { 1793: 1 }) === "55");
+  t("FX B delay", P2KD.format(1163, -12) === "1/4d" && P2KD.format(1163, 20) === "100 ms");
+  t("unknown enum value shown raw", P2KD.format(1921, 250) === "(250)");
+}
+
+/* param table sanity */
+{
+  const p = P2KC.presetsFromSysex(P2KC.fromHex(P2KD.INIT_SYX))[0].preset;
+  const missing = Object.keys(P2KD.PARAMS).map(Number).filter((id) =>
+    P2KD.isLayerParam(id) ? !(id in p.layers[0]) : !(id in p.common) && !(id >= 967 && id <= 970));
+  t("every defined param is in the dump layout", missing.length === 0, missing.join(","));
+  const dupes = Object.values(P2KD.PARAMS).filter((d) => d.opts && new Set(d.opts.map((o) => o[0])).size !== d.opts.length);
+  t("enum values unique", dupes.length === 0, dupes.map((d) => d.id).join(","));
+  const outOfRange = Object.values(P2KD.PARAMS).filter((d) => d.opts && d.opts.some((o) => o[0] < d.min || o[0] > d.max));
+  t("enum values within min..max", outOfRange.length === 0, outOfRange.map((d) => d.id).join(","));
+}
+
+/* ROM database */
+{
+  const c = P2KD.romById(4);
+  t("Composer: 8 banks, instruments, riffs", c && c.banks.length === 8 && c.instruments.length > 1000 && c.riffs.length > 300);
+  t("instrument 1 = Stereo Grand", P2KD.instrumentName(4, 1) === "pno:Stereo Grand");
+  t("preset name lookup", P2KD.presetName(4, 1) === "brs:Soft Trumpet");
+  t("ROM labels", P2KD.romLabel(0) === "User" && P2KD.romLabel(13) === "Pure Phatt (PHATT)" && P2KD.romLabel(99) === "ROM 99",
+    P2KD.romLabel(13));
+}
+
+document.getElementById("summary").textContent = (failures ? failures + " FAILED, " : "") + passes + " passed";
+document.getElementById("summary").className = failures ? "fail" : "ok";
+document.title = (failures ? "FAIL " : "OK ") + document.title;
+</script>
+</body>
+</html>
