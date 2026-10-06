@@ -282,7 +282,7 @@ const Presets = (() => {
     } catch (e) {
       setStatus(e.message + ". Check the MIDI input and the P2K's SysEx ID.", "err");
     } finally {
-      $readNames.textContent = "Read names from P2K";
+      $readNames.textContent = "Read names";
     }
   }
 

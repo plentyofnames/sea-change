@@ -45,9 +45,32 @@
   header .sub { color: var(--muted); font-size: 12px; }
   header .sibling { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: none; }
   header .sibling:hover { color: var(--accent); }
-  /* Tabs on the left, MIDI ports on the right of the same row, no taller than the tabs. */
-  .tabbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; flex-basis: 100%; margin-top: 4px; }
-  .tabs { display: flex; gap: 2px; align-self: flex-end; }
+  /* One row, no taller than the tabs: tabs, the Presets tab's ROM/search tools,
+     the MIDI ports. Narrower windows move the tools to a second row first,
+     narrow ones the ports too. */
+  .tabbar {
+    flex-basis: 100%; margin-top: 4px;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "tabs tools io"; align-items: center; column-gap: 16px;
+  }
+  .tabs { grid-area: tabs; display: flex; gap: 2px; align-self: end; }
+  .tools { grid-area: tools; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tabbar select, .tabbar input[type="search"], .tabbar .btn { height: 24px; padding: 2px 6px; font-size: 12px; }
+  .tabbar .btn { align-self: center; padding: 2px 10px; flex: none; }
+  #rom { width: 210px; flex: none; }
+  #search { flex: 0 1 230px; min-width: 120px; }
+  #type { width: 150px; flex: none; }
+  @media (max-width: 1399px) {
+    .tabbar { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "tabs io" "tools tools"; }
+    .midi-io { justify-self: end; }
+    .tools { margin: 6px 0 10px; }
+  }
+  @media (max-width: 699px) {
+    .tabbar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "tabs" "io" "tools"; }
+    .midi-io { justify-self: start; margin-top: 6px; }
+    #rom { width: auto; flex: 1 1 160px; }
+    .tools { flex-wrap: wrap; }
+  }
   .tab {
     background: none; border: none; border-bottom: 2px solid transparent;
     color: var(--muted); padding: 8px 14px 9px; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -55,7 +78,7 @@
   .tab:hover { color: var(--text); }
   .tab.on { color: var(--text); border-bottom-color: var(--accent); }
 
-  .midi-io { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-left: auto; }
+  .midi-io { grid-area: io; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
   .midi-io label {
     display: flex; align-items: center; gap: 5px;
     font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
@@ -65,7 +88,7 @@
   .row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-  select, input[type="search"], input[type="text"], .clear-btn, .btn {
+  select, input[type="search"], input[type="text"], .btn {
     background: var(--btn);
     color: var(--text);
     border: 1px solid var(--border);
@@ -74,9 +97,8 @@
     font-size: 13px;
   }
   select:focus, input[type="search"]:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
-  #rom, #search { min-width: 220px; }
-  .clear-btn, .btn { align-self: flex-end; padding: 6px 12px; cursor: pointer; }
-  .clear-btn:hover, .btn:hover { background: var(--btn-hover); }
+  .btn { align-self: flex-end; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { background: var(--btn-hover); }
   .btn:disabled { opacity: 0.45; cursor: default; }
   .btn.primary { background: var(--accent-dim); border-color: var(--accent-dim); }
   .btn.primary:hover { background: var(--accent); }
@@ -86,7 +108,6 @@
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 8px;
-    margin-top: 14px;
   }
   @media (max-width: 900px) { .banks { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .bank-btn {
@@ -335,6 +356,14 @@
         <button class="tab on" role="tab" data-view="presets">Presets</button>
         <button class="tab" role="tab" data-view="editor">Editor</button>
       </nav>
+      <div class="tools" id="presets-tools">
+        <select id="rom" aria-label="ROM" title="ROM (Bank Select MSB)"></select>
+        <input type="search" id="search" aria-label="Search all ROMs" title="Search all ROMs by name or category code; several words must all match"
+          placeholder="Search all ROMs, e.g. moog" autocomplete="off" spellcheck="false">
+        <select id="type" aria-label="Type" title="Preset type"><option value="">All types</option></select>
+        <button id="clear" class="btn" hidden>Clear</button>
+        <button id="read-names" class="btn" hidden title="Read the user preset names from the P2K over SysEx">Read names</button>
+      </div>
       <div class="midi-io">
         <label title="MIDI output, to the P2K's MIDI In">Out
           <select id="port"><option value="">— No MIDI access —</option></select></label>
@@ -350,22 +379,6 @@
 
   <div id="view-presets">
     <section class="controls">
-      <div class="row">
-        <div class="field">
-          <label for="rom">ROM</label>
-          <select id="rom"></select>
-        </div>
-        <div class="field">
-          <label for="search">Search all ROMs</label>
-          <input type="search" id="search" placeholder="name or category, e.g. moog, pad dream" autocomplete="off" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="type">Type</label>
-          <select id="type"><option value="">All types</option></select>
-        </div>
-        <button id="clear" class="clear-btn" hidden>Clear</button>
-        <button id="read-names" class="btn" hidden title="Read the user preset names from the unit over SysEx">Read names from P2K</button>
-      </div>
       <div id="banks" class="banks"></div>
     </section>
 
@@ -463,6 +476,7 @@
   const tabs = document.querySelectorAll(".tab");
   function show(name) {
     for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
+    document.getElementById("presets-tools").hidden = name !== "presets";
     tabs.forEach((t) => t.classList.toggle("on", t.dataset.view === name));
     const hash = name === "editor" ? "#editor" : "";
     if (location.hash !== hash) history.replaceState(null, "", location.pathname + location.search + hash);
