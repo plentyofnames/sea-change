@@ -24,6 +24,8 @@ lands exactly on the preset you clicked, whatever bank it was in before.
 - Clicking a search result sends it and moves the bank view to where it
   lives; **Esc** returns to the bank view.
 - **User banks 0–3**, selectable by number.
+- **Remembers the MIDI output and channel** in the browser. If the saved
+  output isn't plugged in yet, it's picked up as soon as it appears.
 - One self-contained `index.html`: no build step, no dependencies.
 
 ## ROMs and bank select

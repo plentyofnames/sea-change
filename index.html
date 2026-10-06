@@ -473,8 +473,26 @@ const P2K_ROMS = [
     }
   }
 
+  // localStorage is shared by every app on the origin, hence the prefixed key.
+  const STORE_KEY = 'sea-change:settings';
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
+  })();
+  // The output the user last picked. Port ids can change between sessions, so the name is the fallback.
+  let preferredPort = saved.port || null;
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        port: preferredPort,
+        channel: parseInt($channel.value, 10),
+      }));
+    } catch { /* storage unavailable: settings just aren't remembered */ }
+  }
+
+  // Returns true if the preferred output is connected (and now selected).
   function refreshPorts() {
-    if (!midiAccess) return;
+    if (!midiAccess) return false;
     const prev = $port.value;
     $port.innerHTML = '';
     const outs = [...midiAccess.outputs.values()];
@@ -483,7 +501,7 @@ const P2K_ROMS = [
       opt.value = '';
       opt.textContent = '— No MIDI outputs found —';
       $port.appendChild(opt);
-      return;
+      return false;
     }
     for (const out of outs) {
       const opt = document.createElement('option');
@@ -491,7 +509,16 @@ const P2K_ROMS = [
       opt.textContent = out.name + (out.manufacturer ? ' (' + out.manufacturer + ')' : '');
       $port.appendChild(opt);
     }
-    if (prev && outs.some(o => o.id === prev)) $port.value = prev;
+    const preferred = preferredPort &&
+      (outs.find(o => o.id === preferredPort.id) || outs.find(o => o.name === preferredPort.name));
+    const pick = preferred || outs.find(o => o.id === prev);
+    if (pick) $port.value = pick.id;
+    return !!preferred;
+  }
+
+  function selectedOutputName() {
+    const out = midiAccess && midiAccess.outputs.get($port.value);
+    return out ? out.name : '—';
   }
 
   function sendPreset(r, b, pc) {
@@ -518,9 +545,9 @@ const P2K_ROMS = [
     $rom.value = String(r);
     render();
 
-    const label = rom.user ? '' : ' ' + rom.banks[b][pc] + ' ';
+    const label = rom.user ? '' : ' ' + rom.banks[b][pc];
     setStatus(rom.id + ' bank ' + b + ' #' + pc + label +
-      ' (MSB' + rom.msb + ', LSB ' + b + ', PC ' + pc + ') ch ' + (ch + 1) + ' → ' + out.name, 'ok');
+      ' (MSB ' + rom.msb + ', LSB ' + b + ', PC ' + pc + ') ch ' + (ch + 1) + ' → ' + out.name, 'ok');
   }
 
   $rom.addEventListener('change', () => {
@@ -534,7 +561,14 @@ const P2K_ROMS = [
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && isSearching()) { e.preventDefault(); clearSearch(); }
   });
+  $port.addEventListener('change', () => {
+    const out = midiAccess && midiAccess.outputs.get($port.value);
+    preferredPort = out ? { id: out.id, name: out.name } : null;
+    saveSettings();
+  });
+  $channel.addEventListener('change', saveSettings);
 
+  $channel.value = String(Math.max(0, Math.min(15, saved.channel | 0)));
   render();
 
   if (!navigator.requestMIDIAccess) {
@@ -544,15 +578,17 @@ const P2K_ROMS = [
 
   navigator.requestMIDIAccess({ sysex: false }).then(access => {
     midiAccess = access;
-    refreshPorts();
+    const foundPreferred = refreshPorts();
     access.onstatechange = () => {
       refreshPorts();
-      setStatus('MIDI ports updated');
+      setStatus('MIDI ports updated. Output: ' + selectedOutputName());
     };
-    if (access.outputs.size > 0) {
-      setStatus('Ready. ' + access.outputs.size + ' output(s) found.', 'ok');
-    } else {
+    if (access.outputs.size === 0) {
       setStatus('MIDI ready, but no outputs are connected.', 'err');
+    } else if (preferredPort && !foundPreferred) {
+      setStatus('Saved output "' + preferredPort.name + '" is not connected. Using ' + selectedOutputName() + ' for now.', 'err');
+    } else {
+      setStatus('Ready. Output: ' + selectedOutputName(), 'ok');
     }
   }).catch(err => {
     setStatus('MIDI access denied: ' + err.message, 'err');
