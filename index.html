@@ -35,7 +35,7 @@
     color: var(--text);
     min-height: 100vh;
   }
-  header, section.controls, section.midi, footer {
+  header, section.controls, footer {
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
@@ -45,7 +45,9 @@
   header .sub { color: var(--muted); font-size: 12px; }
   header .sibling { margin-left: auto; color: var(--muted); font-size: 12px; text-decoration: none; }
   header .sibling:hover { color: var(--accent); }
-  .tabs { display: flex; gap: 2px; flex-basis: 100%; margin-top: 4px; }
+  /* Tabs on the left, MIDI ports on the right of the same row, no taller than the tabs. */
+  .tabbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; flex-basis: 100%; margin-top: 4px; }
+  .tabs { display: flex; gap: 2px; align-self: flex-end; }
   .tab {
     background: none; border: none; border-bottom: 2px solid transparent;
     color: var(--muted); padding: 8px 14px 9px; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -53,7 +55,13 @@
   .tab:hover { color: var(--text); }
   .tab.on { color: var(--text); border-bottom-color: var(--accent); }
 
-  section.midi { padding-top: 10px; padding-bottom: 10px; }
+  .midi-io { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-left: auto; }
+  .midi-io label {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .midi-io select { padding: 2px 4px; font-size: 12px; height: 24px; }
+  #port, #inport { width: 170px; }
   .row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -66,7 +74,6 @@
     font-size: 13px;
   }
   select:focus, input[type="search"]:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
-  #port, #inport { min-width: 200px; }
   #rom, #search { min-width: 220px; }
   .clear-btn, .btn { align-self: flex-end; padding: 6px 12px; cursor: pointer; }
   .clear-btn:hover, .btn:hover { background: var(--btn-hover); }
@@ -323,32 +330,23 @@
     <h1>Sea Change</h1>
     <span class="sub">E-MU Proteus 2000 preset selector &amp; editor · Web MIDI</span>
     <a class="sibling" href="../small-change/index.html">Any other synth? Small Change →</a>
-    <nav class="tabs" role="tablist">
-      <button class="tab on" role="tab" data-view="presets">Presets</button>
-      <button class="tab" role="tab" data-view="editor">Editor</button>
-    </nav>
-  </header>
-
-  <section class="midi">
-    <div class="row">
-      <div class="field">
-        <label for="port">MIDI Output</label>
-        <select id="port"><option value="">— No MIDI access —</option></select>
-      </div>
-      <div class="field">
-        <label for="channel">Channel</label>
-        <select id="channel"></select>
-      </div>
-      <div class="field" title="The editor reads from the P2K through this input (from the P2K's MIDI Out). The preset selector doesn't need it.">
-        <label for="inport">MIDI Input</label>
-        <select id="inport"><option value="">— No MIDI access —</option></select>
-      </div>
-      <div class="field" title="The P2K's MIDI SysEx ID (Master menu, default 0). Only the editor uses it.">
-        <label for="devid">SysEx ID</label>
-        <select id="devid"></select>
+    <div class="tabbar">
+      <nav class="tabs" role="tablist">
+        <button class="tab on" role="tab" data-view="presets">Presets</button>
+        <button class="tab" role="tab" data-view="editor">Editor</button>
+      </nav>
+      <div class="midi-io">
+        <label title="MIDI output, to the P2K's MIDI In">Out
+          <select id="port"><option value="">— No MIDI access —</option></select></label>
+        <label title="MIDI channel">Ch
+          <select id="channel"></select></label>
+        <label title="MIDI input, from the P2K's MIDI Out. Only the editor needs it.">In
+          <select id="inport"><option value="">— No MIDI access —</option></select></label>
+        <label title="The P2K's MIDI SysEx ID (Master menu, default 0). Only the editor uses it.">ID
+          <select id="devid"></select></label>
       </div>
     </div>
-  </section>
+  </header>
 
   <div id="view-presets">
     <section class="controls">
