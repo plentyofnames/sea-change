@@ -66,7 +66,7 @@ as a `.syx` file.
 
 | ROM | Display | MSB (CC 0) | LSB (CC 32) | Preset names from |
 |-----|---------|-----------:|------------:|-------------------|
-| Composer | `CMPSR` | 4 | 0–7 | Proteus 2000 Operation Manual Rev. E |
+| Composer | `CMPSR` | 4 | 0–7 | Proteus 2000 Operation Manual Rev. E, corrected from the unit's own names |
 | Pure Phatt | `PHATT` | 13 | 0–3 | Turbo Phatt Operation Manual Rev. A |
 | TSCY (Techno Synth Construction Yard) | `TeCnO` | 65 | 0–3 | Orbit-3 Operation Manual Rev. A |
 | Beat Garden | `BEAT` | 67 | 0–3 | Orbit-3 Operation Manual Rev. A |
@@ -76,6 +76,11 @@ Pure Phatt is the sound set of the Turbo Phatt and Mo'Phatt modules; TSCY
 and Beat Garden are the two halves of the Orbit-3. Other Proteus 2000-family
 ROMs aren't in yet; presets that use them still edit fine, with numbers where
 the names would be.
+
+The Composer names were checked against the names a real unit reports (as
+read by prodatum and Edisyn), which fixed 17 that the manual transcription
+had cut short or misspelled: `wav:Pure H20`, `bs4:CZ101`, `kit:Drum 303` and
+so on.
 
 The Proteus 2000 manual lists Composer banks 4–7 as "User Bank 0–3, CMPSR
 Bank 4–7", because the factory user banks start out as copies of them. They

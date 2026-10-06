@@ -29,9 +29,10 @@ Key facts that trip people up:
   edits ("Sysex too fast"), hence the 20 ms pacing and coalescing.
 - Closed-loop dumps: header is ACKed as packet 0; send packet n+1 on ACK n;
   EOF after the last. Fall back to open loop (150 ms gaps) without MIDI in.
-- Sea Change's Composer preset names were typed from the manual and differ
-  from the unit's in ~17 places (truncations like `wav:Pure H` vs `wav:Pure
-  H20`); name comparisons normalise whitespace and allow prefixes.
+- Preset names were typed from the manuals. Composer's are corrected against
+  the unit's own (Edisyn's `n_prs_4.txt`); the other ROMs still differ from it
+  in spacing (the unit pads with double spaces), so name comparisons
+  normalise whitespace and allow prefixes.
 - None of this has been tested on hardware yet: treat new findings as
   corrections and note them here.
 
