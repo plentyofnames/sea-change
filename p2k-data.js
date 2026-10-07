@@ -384,6 +384,85 @@ const P2KD = (() => {
     def(1923 + c * 3, "Cord " + (c + 1) + " amount", -100, 100, { fmt: signed });
   }
 
+  /* --------------------- setup: multimode, master, beats ------------------- */
+  // MIDI channels 0..31 are 1A..16A, 1B..16B (the P2K's two MIDI inputs).
+  const chName = (v) => (v % 16) + 1 + (v < 16 ? "A" : "B");
+  const channelOr = (none) => (v) => (v < 0 ? none : chName(v));
+
+  // Per channel; MULTIMODE_CHANNEL_SELECT (129) picks the channel.
+  def(130, "Preset", 0, 1023);
+  def(131, "Volume", 0, 127);
+  def(132, "Pan", 0, 127, { fmt: (v) => pan(v - 64) });       // 0 = 64L, 64 = center, 127 = 63R
+  def(133, "Output", -1, 2, opts([[-1, "Preset"], [0, "Main"], [1, "Sub 1"], [2, "Sub 2"]]));
+  def(134, "Arp", -2, 1, opts([[-2, "Off"], [-1, "On"], [0, "Preset"], [1, "Master"]]));
+  def(135, "Enabled", 0, 1, opts(OFF_ON));
+  def(137, "Program change", 0, 1, opts(OFF_ON));
+  def(138, "ROM", 0, 255);
+  // Not per channel.
+  def(139, "Basic channel", 0, 31, { fmt: chName });
+  def(140, "FX control channel", -1, 31, { fmt: channelOr("Master FX") });
+  def(141, "Tempo control channel", 0, 31, { fmt: chName });
+
+  // Master general
+  def(257, "Tempo", 0, 300, { fmt: (v) => (v === 0 ? "MIDI clock" : v + " bpm") });
+  def(258, "FX bypass", 0, 1, opts(OFF_ON));
+  def(259, "Transpose", -12, 12, { fmt: (v) => signed(v) + " st" });
+  def(260, "Tune", -63, 63, { fmt: (v) => (v > 0 ? "+" : "") + (v * 100 / 64).toFixed(1) + " ct" });
+  def(264, "Bend range", 0, 12, { fmt: (v) => "±" + v });
+  def(265, "Velocity curve", 0, 13, { fmt: (v) => (v === 0 ? "Linear" : "Curve " + v) });
+  def(266, "Output format", 1, 2, opts([[1, "S/PDIF"], [2, "AES Pro"]]));
+  def(267, "Knob quick edit", 0, 1, opts(OFF_ON));
+  def(268, "Knob deep edit", 0, 1, opts(OFF_ON));
+  def(269, "Edit all layers", 0, 1, opts(OFF_ON));
+  def(270, "Demo mode", 0, 1, opts(OFF_ON));
+
+  // Beats (in the master section on firmware that has them)
+  def(271, "Beats", 0, 3, opts([[0, "Off"], [1, "On"], [2, "With bts presets"], [3, "Master riff"]]));
+  def(272, "Beats channel", -1, 31, { fmt: channelOr("Basic") });
+  def(273, "Trigger channel", -1, 31, { fmt: channelOr("Basic") });
+  def(274, "Trigger offset", -127, 127, { fmt: (v) => signed(v) + " keys" });
+  // The manual's "Riff tempo" / "Riff controllers" screens; the spec calls them "ignore".
+  def(275, "Riff tempo", 0, 1, opts([[0, "Use riff tempo"], [1, "Use current tempo"]]));
+  def(276, "Riff controllers", 0, 1, opts([[0, "Use riff controllers"], [1, "Ignore them"]]));
+  def(277, "Master riff ROM", 0, 255);
+  def(278, "Master riff", 0, 1023);
+  // Per trigger (LAYER_SELECT 898 = 0..23) and per part (898 = 0..15).
+  def(160, "Key", 0, 127, { fmt: noteName });
+  def(161, "Latch", 0, 2, opts([[0, "Unlatched"], [1, "Latched"], [2, "1 bar"]]));
+  def(164, "Velocity", -1, 127, { fmt: (v) => (v < 0 ? "Trigger vel" : v + "%") });
+  def(165, "Transpose", -36, 36, { fmt: signed });
+  def(166, "Group", 0, 4, opts([[0, "None"], [1, "Group 1"], [2, "Group 2"], [3, "Group 3"], [4, "Group 4"]]));
+  const BEATS_TRIGGERS = ["Kick 1", "Snare 1", "Hihat 1", "Bass", "Kick 2", "Snare 2", "Hihat 2", "Perc 2",
+    "Perc 3 / Fill 1", "Perc 4 / Fill 2", "Perc 5 / Fill 3", "Perc 6 / Fill 4", "Inst 1 / Wild 1",
+    "Inst 2 / Wild 2", "Inst 3 / Wild 3", "Inst 4 / Wild 4", "Group 1", "Group 2", "Group 3", "Group 4",
+    "Start/stop", "Clear parts", "Mute", "Trigger hold"];
+
+  // Master MIDI
+  def(385, "MIDI mode", 0, 2, opts([[0, "Omni"], [1, "Poly"], [2, "Multi"]]));
+  def(386, "Mode change", 0, 1, opts([[0, "Ignore"], [1, "Accept"]]));
+  def(388, "SysEx ID", 0, 126);
+  "ABCDEFGH".split("").forEach((c, i) => def(391 + i, "Knob " + c, 0, 31, { fmt: (v) => "CC " + v }));
+  "IJKL".split("").forEach((c, i) => def(406 + i, "Knob " + c, 70, 95, { fmt: (v) => "CC " + v }));
+  [1, 2, 3].forEach((n, i) => def(399 + i, "Footswitch " + n, 64, 79, { fmt: (v) => "CC " + v }));
+  const tempoCtl = { fmt: (v) => (v === -3 ? "Off" : v === -2 ? "Mono pressure" : v === -1 ? "Pitch wheel" : "CC " + v) };
+  def(402, "Tempo up", -3, 31, tempoCtl);
+  def(403, "Tempo down", -3, 31, tempoCtl);
+  def(404, "Knobs MIDI out", 0, 1, opts(OFF_ON));
+  def(405, "SysEx packet delay", 0, 1000, { fmt: (v) => v + " ms" });
+
+  // Master effects and arpeggiator: the preset's parameters at other ids, without "Master".
+  const mirror = (from, to, extra) => { PARAMS[to] = Object.assign({}, PARAMS[from], { id: to }, extra || {}); };
+  for (let i = 0; i < 16; i++) mirror(1153 + i, 513 + i);
+  mirror(1153, 513, { min: 1, opts: FX_A.slice(1) });
+  mirror(1160, 520, { min: 1, opts: FX_B.slice(1) });
+  for (let i = 0; i < 16; i++) mirror(1025 + i, 641 + i);   // status .. key high
+  mirror(1041, 659);                                           // pattern speed
+  mirror(1042, 660);                                           // pattern ROM
+  mirror(1043, 661);                                           // post-delay
+  const ARP_OUT = [[0, "Off"], [1, "Arps"], [2, "Riffs"], [3, "Arps & riffs"]];
+  def(657, "MIDI out", 0, 3, opts(ARP_OUT));
+  def(658, "Song start resyncs", 0, 3, opts(ARP_OUT));
+
   const isLayerParam = (id) => id >= 1408;
 
   // Display string for a raw value.
@@ -448,7 +527,7 @@ const P2KD = (() => {
     NOTES, noteName, signed, pan, db, TEMPO_DIVS, LFO_HZ, glideSecs, filFreq, morphGain,
     FILTERS, FILTER_KNOBS, filterClass, TEMPO_ENV, LAYER_CORD_SRC, LAYER_CORD_DST, PRESET_CORD_SRC,
     PRESET_CORD_DST, FX_A, FX_B, ARP_MODES, ARP_NOTES, ARP_DURATIONS, KBD_TUNINGS, LFO_SHAPES,
-    ENVS, STAGES, STAGE_TIME_ORDER, PARAMS, isLayerParam, format,
+    ENVS, STAGES, STAGE_TIME_ORDER, PARAMS, isLayerParam, format, chName, BEATS_TRIGGERS,
     romById, romLabel, presetName, instrumentName, riffName, arpName, INIT_SYX,
   };
 })();

@@ -33,8 +33,21 @@ Key facts that trip people up:
   the unit's own (Edisyn's `n_prs_4.txt`); the other ROMs still differ from it
   in spacing (the unit pads with double spaces), so name comparisons
   normalise whitespace and allow prefixes.
-- None of this has been tested on hardware yet: treat new findings as
-  corrections and note them here.
+- The editor worked on the user's P2K in a longer hardware session
+  (2026-10-06). Note any hardware findings that contradict the above here.
+- Setup tab (not yet tried on hardware): the setup dump (1Ch) is decoded by
+  section with ids in order; the MIDI section's gaps are uncertain (spec:
+  385, 386, 388, 391..; prodatum's code: none), so `decodeSetup` tries both
+  and keeps the plausible one (SysEx ID = dump's device byte, footswitch CCs
+  64-79, knobs I-L 70-95). Writes never depend on that: they're param edits.
+- 129 (multimode channel) and 898 (layer, or Beats trigger/part) are shared
+  selections: both tabs build them with `Midi.select()` inside deferred
+  queue builders, so neither tab's edits land on the other's selection.
+- The Beats trigger layout (160/161 per trigger, 164-166 per part) isn't in
+  the setup dump; it's read with parameter requests (02h), which neither
+  Edisyn nor prodatum use, and the card hides itself if they go unanswered.
+- After Copy Setup into the current setup, re-send 388 = the app's SysEx ID
+  with device 7F (a stored setup can carry another ID; prodatum does this too).
 
 Testing: serve the folder (`.claude/launch.json` in the parent folder, port
 8920), open `test.html` after touching the core. No MIDI in the preview pane:
