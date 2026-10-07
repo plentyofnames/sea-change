@@ -24,18 +24,7 @@ const Editor = (() => {
   const LAYER_COLORS = ["#6ea8ff", "#6bd49a", "#e8b85a", "#e07ad8"];
   const ID = { MM_CHANNEL: 129, MM_ROM: 138, BASIC_CHANNEL: 139, PRESET_SELECT: 897, LAYER_SELECT: 898, NAME: 899 };
 
-  function el(tag, cls, text) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-  function svg(tag, attrs, parent) {
-    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (parent) parent.appendChild(e);
-    return e;
-  }
+  const { el, svg, card, cells, sub, fillSelect } = UI;
 
   /* ============================== state ================================== */
   const S = {
@@ -54,7 +43,6 @@ const Editor = (() => {
     lastSelected: null, // what it sent: { romId, number, name }
   };
   let undoStack = [], redoStack = [];
-  let unitLayer = null;        // the LAYER_SELECT the unit has, as far as we know
   let preparedChannel = null;  // channel the unit's basic channel was confirmed for
 
   const initPreset = () => C.presetsFromSysex(C.fromHex(D.INIT_SYX))[0].preset;
@@ -176,12 +164,10 @@ const Editor = (() => {
   function sendParam(id, v, layer) {
     const key = "p" + (isLayer(id) ? layer : "c") + ":" + id;
     Midi.enqueue(() => {
-      const dev = Midi.devId, msgs = [];
-      if (isLayer(id) && unitLayer !== layer) {
-        msgs.push(C.paramEdit(dev, [[ID.LAYER_SELECT, layer]]));
-        unitLayer = layer;
-      }
-      msgs.push(C.paramEdit(dev, [[id, v]]));
+      // The Setup tab may have moved the channel or layer selection: put them back first.
+      const msgs = Midi.select(ID.MM_CHANNEL, Midi.channel);
+      if (isLayer(id)) msgs.push(...Midi.select(ID.LAYER_SELECT, layer));
+      msgs.push(C.paramEdit(Midi.devId, [[id, v]]));
       return msgs;
     }, { key, gap: 20 });
   }
@@ -213,6 +199,7 @@ const Editor = (() => {
   async function prepareChannel() {
     const ch = Midi.channel, dev = Midi.devId;
     Midi.sendNow(C.paramEdit(dev, [[ID.MM_CHANNEL, ch]]));
+    Midi.selectedAs(ID.MM_CHANNEL, ch);
     if (preparedChannel === ch || !Midi.input) return "";
     let note = "";
     try {
@@ -233,10 +220,13 @@ const Editor = (() => {
   // The layer selection is forgotten when the last message actually goes out.
   function startSession() {
     const ch = Midi.channel;
-    Midi.enqueue(() => [C.paramEdit(Midi.devId, [[ID.MM_CHANNEL, ch]])], { gap: 25 });
+    Midi.enqueue(() => {
+      Midi.selectedAs(ID.MM_CHANNEL, ch);
+      return [C.paramEdit(Midi.devId, [[ID.MM_CHANNEL, ch]])];
+    }, { gap: 25 });
     Midi.enqueue(() => [C.paramEdit(Midi.devId, [[ID.MM_ROM, 0]])], { gap: 25 });
     Midi.enqueue(() => {
-      unitLayer = null;
+      Midi.forgetSelection(ID.LAYER_SELECT);
       return [C.paramEdit(Midi.devId, [[ID.PRESET_SELECT, C.EDIT_BUFFER]])];
     }, { gap: 25 });
     S.live = true;
@@ -619,218 +609,16 @@ const Editor = (() => {
   }
 
   /* ------------------------------ controls -------------------------------- */
-  function card(parent, title, cls) {
-    const c = el("section", "card" + (cls ? " " + cls : ""));
-    const h = el("h3");
-    h.appendChild(el("span", "", title));
-    c.appendChild(h);
-    parent.appendChild(c);
-    return { card: c, head: h };
-  }
-  const cells = (parent) => { const c = el("div", "cells"); parent.appendChild(c); return c; };
-  function sub(parent, title, cls) {
-    parent.appendChild(el("h4", "", title));
-    const c = cells(parent);
-    if (cls) c.classList.add(cls);
-    return c;
-  }
-
-  function cellBase(parent, label, cls) {
-    const cell = el("div", "cell" + (cls ? " " + cls : ""));
-    const lab = el("div", "lab");
-    const name = el("span", "", label);
-    const v = el("span", "v");
-    lab.append(name, v);
-    cell.appendChild(lab);
-    parent.appendChild(cell);
-    return { cell, name, v };
-  }
-
-  // Click a value to type a raw number.
-  function editable(vEl, id, layerFn) {
-    vEl.title = "Click to type a value";
-    vEl.addEventListener("click", () => {
-      const d = P[id];
-      const inp = el("input", "vedit");
-      inp.value = String(get(id, layerFn ? layerFn() : undefined));
-      inp.title = d ? d.min + " … " + d.max : "";
-      let finished = false;
-      const done = (commit) => {
-        if (finished) return;    // removing the input blurs it: don't commit twice (or after Escape)
-        finished = true;
-        if (commit) {
-          const n = parseInt(inp.value, 10);
-          if (!Number.isNaN(n)) setParam(id, n, layerFn ? { layer: layerFn() } : undefined);
-        }
-        inp.replaceWith(vEl);
-        scheduleRepaint();
-      };
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") done(true);
-        else if (e.key === "Escape") done(false);
-        e.stopPropagation();
-      });
-      inp.addEventListener("blur", () => done(true));
-      vEl.replaceWith(inp);
-      inp.focus();
-      inp.select();
-    });
-  }
-
-  function slider(parent, id, o = {}) {
-    const d = P[id];
-    const { cell, name, v } = cellBase(parent, o.label || d.label, o.cls);
-    const r = el("input");
-    r.type = "range";
-    r.min = String(o.min !== undefined ? o.min : d.min);
-    r.max = String(o.max !== undefined ? o.max : d.max);
-    r.step = "1";
-    cell.appendChild(r);
-    r.addEventListener("input", () => setParam(id, +r.value));
-    editable(v, id);
-    reg(() => {
-      const x = get(id);
-      cell.hidden = x === undefined;
-      if (x === undefined) return;
-      if (+r.value !== x) r.value = String(x);
-      v.textContent = D.format(id, x, scope(id));
-      if (o.dynLabel) name.textContent = o.dynLabel();
-      cell.classList.toggle("dim", !!(o.dim && o.dim()));
-    });
-    return cell;
-  }
-
-  // options: [[value, label], ...] or [{ group, items: [[value, label], ...] }, ...]
-  function fillSelect(s, options, current) {
-    s.innerHTML = "";
-    const vals = new Set();
-    const add = (parent, [v, label]) => {
-      const opt = el("option", "", label);
-      opt.value = String(v);
-      parent.appendChild(opt);
-      vals.add(v);
-    };
-    for (const o of options) {
-      if (Array.isArray(o)) add(s, o);
-      else {
-        const g = el("optgroup");
-        g.label = o.group;
-        o.items.forEach((it) => add(g, it));
-        s.appendChild(g);
-      }
-    }
-    s._vals = vals;
-    if (!vals.has(current)) {
-      const opt = el("option", "", "(" + current + ")");
-      opt.value = String(current);
-      s.insertBefore(opt, s.firstChild);
-      vals.add(current);
-    }
-  }
-
-  function choice(parent, id, o = {}) {
-    const d = P[id];
-    const { cell, v } = cellBase(parent, o.label || d.label, o.cls);
-    v.remove();
-    const s = el("select");
-    cell.appendChild(s);
-    s.addEventListener("change", () => setParam(id, +s.value));
-    let sig;
-    reg(() => {
-      const x = get(id);
-      cell.hidden = x === undefined;
-      if (x === undefined) return;
-      const nsig = o.sig ? o.sig() : "static";
-      if (nsig !== sig || !s._vals.has(x)) {
-        fillSelect(s, o.options ? o.options() : d.opts, x);
-        sig = nsig;
-      }
-      if (s.value !== String(x)) s.value = String(x);
-      cell.classList.toggle("dim", !!(o.dim && o.dim()));
-    });
-    return cell;
-  }
-
-  // On/off param as a button. In a card header when `head` is given.
-  function toggle(parent, id, o = {}) {
-    const d = P[id];
-    const b = el("button", "toggle");
-    let wrap = b;
-    if (!o.bare) {
-      const { cell, v } = cellBase(parent, o.label || d.label, o.cls);
-      v.remove();
-      cell.appendChild(b);
-      wrap = cell;
-    } else parent.appendChild(b);
-    b.addEventListener("click", () => setParam(id, get(id) ? 0 : 1));
-    reg(() => {
-      const x = get(id);
-      wrap.hidden = x === undefined;
-      if (x === undefined) return;
-      b.classList.toggle("on", !!x);
-      b.textContent = (o.bare ? (o.label || d.label) + ": " : "") + D.format(id, x);
-      wrap.classList.toggle("dim", !!(o.dim && o.dim()));
-    });
-    return wrap;
-  }
+  const { editable, slider, choice, toggle } = UI.controls({
+    get: (id) => get(id),
+    set: (id, v) => setParam(id, v),
+    ctx: (id) => scope(id),
+    reg: (update) => REG.push(update),
+    repaint: () => scheduleRepaint(),
+  });
 
   /* ----------------------------- ROM lists -------------------------------- */
-  const ROMS = typeof P2K_ROMS !== "undefined" ? P2K_ROMS : [];
-  const romOpts = (field, withUser) => {
-    const list = ROMS.filter((r) => !field || (r[field] && r[field].length)).map((r) => [r.msb, D.romLabel(r.msb)]);
-    return withUser ? [[0, "User"], ...list] : list;
-  };
-  // Names like "pno:Stereo Grand" grouped by their category prefix.
-  function grouped(names, first = 0, numberFmt = (i) => String(i)) {
-    const groups = [];
-    let cur = null;
-    names.forEach((nm, i) => {
-      const k = nm.indexOf(":");
-      const g = k > 0 ? nm.slice(0, k).trim() : "—";
-      const label = numberFmt(i + first) + "  " + (k >= 0 ? nm.slice(k + 1) : nm).trim();
-      if (!cur || cur.group !== g) { cur = { group: g, items: [] }; groups.push(cur); }
-      cur.items.push([i + first, label]);
-    });
-    return groups;
-  }
-  function instrumentOpts(romId) {
-    const r = D.romById(romId);
-    if (!r || !r.instruments) return [[0, "None"]];
-    return [[0, "None"], ...grouped(r.instruments.slice(1), 1)];
-  }
-  function presetOpts(romId) {
-    const off = [-1, "Off"];
-    if (romId === 0) {
-      const groups = [];
-      for (let b = 0; b < 4; b++) {
-        const items = [];
-        for (let pc = 0; pc < 128; pc++) {
-          const n = b * 128 + pc;
-          items.push([n, b + "·" + pc + "  " + (UserNames.get(n) || "")]);
-        }
-        groups.push({ group: "User bank " + b, items });
-      }
-      return [off, ...groups];
-    }
-    const r = D.romById(romId);
-    if (!r) return [off];
-    return [off, ...r.banks.map((bank, b) => ({
-      group: "Bank " + b,
-      items: bank.map((nm, pc) => [b * 128 + pc, b + "·" + pc + "  " + nm]),
-    }))];
-  }
-  function riffOpts(romId) {
-    const r = D.romById(romId);
-    const off = [-1, "Off"];
-    if (!r || !r.riffs) return [off];
-    return [off, ...r.riffs.map((nm, i) => [i, i + "  " + nm])];
-  }
-  function arpOpts(romId) {
-    if (romId === 0) return Array.from({ length: 256 }, (_, i) => [i, "User pattern " + i]);
-    const r = D.romById(romId);
-    if (!r || !r.arps || !r.arps.length) return [[0, "0"]];
-    return r.arps.map((nm, i) => [i, i + "  " + nm]);
-  }
+  const { romOpts, instrumentOpts, presetOpts, riffOpts, arpOpts } = UI;
 
   /* ----------------------------- patchcords ------------------------------- */
   function cordTable(parent, base, count, srcOpts, dstOpts) {
@@ -1437,6 +1225,16 @@ const Editor = (() => {
       S.live = false;
       paintBar();
       setStatus("Channel changed: Get or Send to edit the preset on channel " + (Midi.channel + 1) + ".");
+    }
+  });
+
+  // The Setup tab changed the basic channel or loaded another setup: the edit
+  // buffer may be another one now.
+  document.addEventListener("p2k:setup-changed", () => {
+    preparedChannel = null;
+    if (S.live) {
+      S.live = false;
+      paintBar();
     }
   });
 

@@ -16,6 +16,10 @@ showing what the unit shows (Hz, dB, note names, tempo divisions). Edits go to
 the Proteus as you make them; write the result to a user location or save it
 as a `.syx` file.
 
+**Setup tab:** the current multisetup: what each of the 32 MIDI channels
+plays, the Master menu, the master effects and arpeggiator, MIDI controller
+assignments and Beats, saved to and loaded from the unit's 128 setups.
+
 ## Presets tab
 
 - **All 2,560 ROM presets by name** for Composer, Pure Phatt, TSCY and
@@ -62,6 +66,29 @@ as a `.syx` file.
   loads it without overwriting anything. Drop a file on the editor to open it.
 - Click any value to type it.
 
+## Setup tab
+
+- **Get from P2K** reads the current multisetup. Every change goes to the unit
+  as you make it; **Save…** stores the setup in one of its 128 locations,
+  **Load** makes a stored one current (with the setup names, once read).
+- **MIDI channels:** for each of the 32 channels (1A–16A, and 1B–16B behind a
+  toggle): on/off, ROM and preset by name, volume, pan, output, arp, and
+  whether it takes program changes. The basic channel and the app's own
+  channel are marked.
+- **Master:** tempo, transpose, tune, bend range, velocity curve, effects
+  bypass; MIDI mode, basic channel, effects and tempo control channels; the
+  front-panel knob options.
+- **Master effects** (what presets set to *Master FX* use) and the **master
+  arpeggiator**, including its MIDI out and song-start options.
+- **MIDI controllers:** the CC numbers of knobs A–L, the footswitches and the
+  tempo controllers; knob MIDI out and the SysEx packet delay.
+- **Beats:** mode, Beats and trigger channels, trigger offset, riff tempo and
+  controllers, the master riff (BTS riffs listed first), and the trigger
+  layout: the key and latch mode of all 24 triggers, and each part's
+  velocity, transpose and group. The trigger layout isn't part of the setup
+  dump; it's read with parameter requests and hidden if the unit doesn't
+  answer them.
+
 ## ROMs and bank select
 
 | ROM | Display | MSB (CC 0) | LSB (CC 32) | Preset names from |
@@ -98,6 +125,7 @@ are real ROM banks; your user banks will have moved on since.
   editor). Set *SysEx ID* to the unit's MIDI SysEx ID (Master menu, default 0).
   Without MIDI in, Send and Write still work (open-loop), and you can edit
   files offline.
+- **Setup tab:** MIDI in and out, and SysEx, like the editor.
 
 ## How it talks to the Proteus
 
@@ -120,6 +148,14 @@ differs:
 - Dump section sizes come from the dump header and vary by firmware (a P2K
   sends 52 common parameters, a P2500 56); decoding follows the header, and
   presets are re-encoded with the sizes they came with.
+- **Setups** are read as one setup dump. Its sections hold parameters in id
+  order, sized by its header; which ids the MIDI section skips differs between
+  the spec and prodatum, so both readings are tried and the one where the
+  SysEx ID and the footswitch/knob CC numbers make sense is used. Changes go
+  out as parameter edits by id, after the multimode channel select for
+  channel settings and the layer select for Beats triggers and parts. Save and
+  Load use E-MU's Copy Setup command; after a Load the SysEx ID is set back
+  to the app's (a setup carries its own).
 - Spec errata the editor follows: tempo offset is three-valued (½×, 1×, 2×),
   arp note values run 1–19, the FX B delay also takes −12…−1 (tempo-synced),
   LFO 2 has all LFO 1 shapes, pans run −64…+63, fine tune −63…+63.
@@ -133,8 +169,10 @@ differs:
 | `p2k-data.js` | parameter tables, ranges, display formulas, E-MU's default preset |
 | `p2k-core.js` | SysEx encode/decode: messages, dumps, handshakes, `.syx` files (no DOM) |
 | `midi.js` | Web MIDI ports, the paced send queue, user preset names |
+| `ui.js` | controls and option lists shared by the Editor and Setup tabs |
 | `presets.js` | the Presets tab |
 | `editor.js` | the Editor tab |
+| `setup.js` | the Setup tab |
 | `sim.js` | a simulated Proteus 2000 for development (`index.html?sim`) |
 | `test.html` | tests for `p2k-core.js` and `p2k-data.js` |
 

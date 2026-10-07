@@ -159,6 +159,19 @@ const Midi = (() => {
 
   function listen(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
+  // The unit's selection params, as far as we know (null = unknown): 129 picks
+  // the multimode channel, 898 the layer (editor) or the Beats trigger/part
+  // (Setup tab). Both tabs call select() inside their deferred message builders,
+  // so it's evaluated when the messages actually go out.
+  const selected = { 129: null, 898: null };
+  function select(id, value) {
+    if (selected[id] === value) return [];
+    selected[id] = value;
+    return [P2KC.paramEdit(parseInt($dev.value, 10) & 0x7f, [[id, value]])];
+  }
+  function selectedAs(id, value) { selected[id] = value; }
+  function forgetSelection(id) { selected[id] = null; }
+
   // Resolves with the first incoming message for which match(m) is truthy.
   function waitFor(match, ms, what) {
     return new Promise((resolve, reject) => {
@@ -189,6 +202,7 @@ const Midi = (() => {
   $out.addEventListener("change", () => {
     const out = output();
     preferredOut = out ? { id: out.id, name: out.name } : null;
+    selected[129] = selected[898] = null;
     saveSettings();
   });
   $in.addEventListener("change", () => {
@@ -198,7 +212,7 @@ const Midi = (() => {
     saveSettings();
   });
   $channel.addEventListener("change", saveSettings);
-  $dev.addEventListener("change", saveSettings);
+  $dev.addEventListener("change", () => { selected[129] = selected[898] = null; saveSettings(); });
 
   async function init() {
     if (!navigator.requestMIDIAccess) {
@@ -228,7 +242,7 @@ const Midi = (() => {
   const outputName = () => (output() ? output().name : "—");
 
   return {
-    init, enableSysex, enqueue, idle, sendNow, listen, waitFor, outputName,
+    init, enableSysex, enqueue, idle, sendNow, listen, waitFor, outputName, select, selectedAs, forgetSelection,
     get output() { return output(); },
     get input() { return input(); },
     get sysex() { return sysex; },

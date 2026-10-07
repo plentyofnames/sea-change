@@ -155,13 +155,50 @@ t("EOF", hx(P2KC.eof(0)) === "F0 18 0F 00 55 7B F7");
 /* param table sanity */
 {
   const p = P2KC.presetsFromSysex(P2KC.fromHex(P2KD.INIT_SYX))[0].preset;
-  const missing = Object.keys(P2KD.PARAMS).map(Number).filter((id) =>
+  const missing = Object.keys(P2KD.PARAMS).map(Number).filter((id) => id >= 899).filter((id) =>
     P2KD.isLayerParam(id) ? !(id in p.layers[0]) : !(id in p.common) && !(id >= 967 && id <= 970));
-  t("every defined param is in the dump layout", missing.length === 0, missing.join(","));
+  t("every defined preset param is in the dump layout", missing.length === 0, missing.join(","));
+  const setupIds = Object.keys(P2KD.PARAMS).map(Number).filter((id) => id < 899);
+  const s = P2KC.decodeSetup(P2KC.encodeSetup({ common: {}, channels: [] }));
+  const notInSetup = setupIds.filter((id) => !(id in s.common) && !(id >= 130 && id <= 138) && ![160, 161, 164, 165, 166].includes(id));
+  t("every defined setup param is in the setup dump layout", notInSetup.length === 0, notInSetup.join(","));
   const dupes = Object.values(P2KD.PARAMS).filter((d) => d.opts && new Set(d.opts.map((o) => o[0])).size !== d.opts.length);
   t("enum values unique", dupes.length === 0, dupes.map((d) => d.id).join(","));
   const outOfRange = Object.values(P2KD.PARAMS).filter((d) => d.opts && d.opts.some((o) => o[0] < d.min || o[0] > d.max));
   t("enum values within min..max", outOfRange.length === 0, outOfRange.map((d) => d.id).join(","));
+}
+
+/* setup dumps */
+{
+  const c = P2KC.DEFAULT_SETUP_COUNTS;
+  const setup = { name: "Song for Alex", common: { 257: 128, 259: -5, 271: 2, 272: -1, 277: 13, 278: 41,
+    385: 2, 388: 3, 391: 21, 399: 64, 400: 65, 401: 66, 405: 300, 406: 70, 407: 71, 408: 72, 409: 73, 513: 14, 520: 22, 523: -12, 641: 1, 660: 65, 661: 4, 139: 1, 140: -1, 141: 0 },
+    channels: Array.from({ length: 32 }, (_, ch) => ({ 130: ch * 7, 131: 100 + ch, 132: 64 - ch, 133: (ch % 4) - 1,
+      134: (ch % 4) - 2, 135: ch % 2, 136: 0, 137: 1, 138: ch < 16 ? 4 : 13 })) };
+  const bytes = P2KC.encodeSetup(setup, { dev: 3 });
+  t("setup dump is the spec's size (736 data bytes for 11/22/16/20/3)",
+    P2KC.encodeSetup(setup, { dev: 3 }).length === 20 + 2 * (19 + 22 + 16 + 21 + 3 + 32 * 9) + 16 + 1 &&
+    P2KC.encodeSetup(Object.assign({}, setup, { counts: { general: 11, arp: 20 } })).length - 21 === 736);
+  t("setup dump classifies", P2KC.classify(bytes).type === "setup");
+  const d = P2KC.decodeSetup(bytes);
+  t("setup round-trips", d.verified && d.layout === "spec" && d.name === "Song for Alex   " && d.dev === 3
+    && eq(Object.fromEntries(Object.entries(setup.common).map(([k]) => [k, d.common[k]])), setup.common)
+    && eq(d.channels, setup.channels), JSON.stringify(d.common).slice(0, 200));
+  t("general ids skip 261-263, MIDI ids skip 387/389/390", !(261 in d.common) && !(387 in d.common) && d.common[264] === 0 && 391 in d.common);
+  const noGaps = P2KC.decodeSetup(P2KC.encodeSetup(setup, { dev: 3, layout: P2KC.SETUP_LAYOUTS[1] }));
+  t("a gap-free MIDI section is detected by its SysEx ID", noGaps.verified && noGaps.layout === "MIDI without gaps"
+    && noGaps.common[391] === 21 && noGaps.common[513] === 14, noGaps.layout);
+  const wrongId = P2KC.decodeSetup(P2KC.encodeSetup(setup, { dev: 9 }));
+  t("a SysEx ID that doesn't match leaves the setup unverified", wrongId.verified === false && wrongId.layout === "spec");
+  // SysEx ID 0 with a gap-free MIDI section: the ID alone can't tell, the CC ranges can
+  const id0 = Object.assign({}, setup, { common: Object.assign({}, setup.common, { 388: 0 }) });
+  const id0d = P2KC.decodeSetup(P2KC.encodeSetup(id0, { dev: 0, layout: P2KC.SETUP_LAYOUTS[1] }));
+  t("SysEx ID 0: the layout is still told apart by the CC ranges", id0d.verified && id0d.layout === "MIDI without gaps", id0d.layout);
+  t("copy setup: stored 5 -> current", P2KC.hex(P2KC.copySetup(0, 5, -1)) === "F0 18 0F 00 55 2C 05 00 7F 7F F7");
+  t("setup dump request", P2KC.hex(P2KC.setupDumpRequest(0)) === "F0 18 0F 00 55 1D F7");
+  t("multimode pan shows 64 as center", P2KD.format(132, 64) === "C" && P2KD.format(132, 0) === "L64" && P2KD.format(132, 127) === "R63");
+  t("channel names", P2KD.chName(0) === "1A" && P2KD.chName(31) === "16B" && P2KD.format(140, -1) === "Master FX");
+  t("master FX has no 'Master' algorithm", P2KD.PARAMS[513].min === 1 && P2KD.format(513, 1) === "Room 1");
 }
 
 /* ROM database */

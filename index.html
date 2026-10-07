@@ -285,6 +285,31 @@
   .toggle.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
 
   .cords { display: block; }
+
+  /* Setup tab tables: compact rows of label-less controls. */
+  .su-channels { display: flex; flex-direction: column; gap: 2px; overflow-x: auto; }
+  .su-ch, .su-trig, .su-part { display: grid; gap: 4px 10px; align-items: center; padding: 2px 4px; border-radius: 6px; }
+  .su-ch { grid-template-columns: 3.2em 4.2em minmax(120px, 1.1fr) minmax(170px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) 6.5em 6.5em 4.2em; min-width: 860px; }
+  .su-trig { grid-template-columns: 9em minmax(110px, 1fr) 8em; }
+  .su-part { grid-template-columns: 9em repeat(2, minmax(90px, 1fr)) 7.5em; }
+  .su-head { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .su-ch .cell, .su-trig .cell, .su-part .cell { min-width: 0; max-width: none; flex: none; gap: 0; }
+  .su-ch .cell .lab, .su-trig .cell .lab, .su-part .cell .lab { justify-content: flex-end; }
+  /* sliders in the tables: value beside the slider, one line per row */
+  :is(.su-ch, .su-trig, .su-part) .cell:has(> input[type="range"]) { flex-direction: row-reverse; align-items: center; gap: 6px; }
+  :is(.su-ch, .su-trig, .su-part) .cell:has(> input[type="range"]) .lab { width: 4.6em; flex: none; }
+  .su-part .cell:has(> input[type="range"]) .lab { width: 6em; }
+  .su-ch .cell select, .su-trig .cell select, .su-part .cell select { padding: 3px 5px; font-size: 12px; }
+  .su-ch .toggle { padding: 3px 6px; font-size: 12px; text-align: center; }
+  .su-chname { font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .su-ch.mine { background: #26314a; }
+  .su-ch.mine .su-chname { color: var(--text); font-weight: 600; }
+  .su-ch.off > :not(.su-chname):not(.cell:nth-child(2)) { opacity: 0.4; }
+  .su-beats { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 8px 28px; }
+  .su-beats > div { display: flex; flex-direction: column; gap: 2px; }
+  #su-name { width: 16.4ch; box-sizing: content-box; }
+  .su-pick { display: flex; align-items: center; gap: 6px; }
+  .su-pick select { padding: 4px 6px; font-size: 12.5px; max-width: 220px; }
   .cord { display: grid; grid-template-columns: 1.8em minmax(0, 1fr) minmax(0, 1fr) minmax(80px, 0.9fr) 3.2em; gap: 6px; align-items: center; }
   .cord .i { font: 11px var(--mono); color: var(--faint); text-align: right; }
   .cord select { padding: 3px 5px; font-size: 12px; min-width: 0; width: 100%; }
@@ -355,6 +380,7 @@
       <nav class="tabs" role="tablist">
         <button class="tab on" role="tab" data-view="presets">Presets</button>
         <button class="tab" role="tab" data-view="editor">Editor</button>
+        <button class="tab" role="tab" data-view="setup">Setup</button>
       </nav>
       <div class="tools" id="presets-tools">
         <select id="rom" aria-label="ROM" title="ROM (Bank Select MSB)"></select>
@@ -426,6 +452,41 @@
     </section>
   </div>
 
+  <div id="view-setup" hidden>
+    <section class="ed-bar">
+      <div class="ed-name" title="The current setup's name (16 characters)">
+        <input id="su-name" maxlength="16" spellcheck="false" autocomplete="off" aria-label="Setup name">
+      </div>
+      <div class="ed-src" id="su-src"></div>
+      <div class="ed-actions">
+        <button class="btn primary" id="su-get" title="Read the current multisetup from the P2K">Get from P2K</button>
+        <span class="sep"></span>
+        <div class="su-pick">
+          <select id="su-load-num" aria-label="Stored setup" title="The P2K's 128 stored setups"></select>
+          <button class="btn" id="su-load" title="Make this stored setup the current one">Load</button>
+        </div>
+        <button class="btn" id="su-save" title="Store the current setup in one of the 128 locations">Save…</button>
+        <button class="btn" id="su-names" title="Read the names of the 128 stored setups">Read names</button>
+      </div>
+    </section>
+    <div id="su-page" class="ed-page"></div>
+  </div>
+
+  <dialog id="save-setup-dlg">
+    <h2>Save the current setup</h2>
+    <p>Stores the setup in one of the P2K's 128 setup locations, replacing what is there.</p>
+    <div class="row">
+      <div class="field">
+        <label for="sv-num">Location</label>
+        <select id="sv-num"></select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="sv-cancel">Cancel</button>
+      <button class="btn primary" id="sv-ok">Save</button>
+    </div>
+  </dialog>
+
   <dialog id="write-dlg">
     <h2>Write preset to the P2K</h2>
     <p>Stores the preset in a user location, replacing what is there.</p>
@@ -467,24 +528,31 @@
 <script src="sim.js"></script>
 <script src="midi.js"></script>
 <script src="presets.js"></script>
+<script src="ui.js"></script>
 <script src="editor.js"></script>
+<script src="setup.js"></script>
 <script>
 "use strict";
-// Tabs. The editor asks for SysEx access the first time it's shown.
+// Tabs. The Editor and Setup tabs ask for SysEx access the first time they're shown.
 (() => {
-  const views = { presets: document.getElementById("view-presets"), editor: document.getElementById("view-editor") };
+  const views = {
+    presets: document.getElementById("view-presets"),
+    editor: document.getElementById("view-editor"),
+    setup: document.getElementById("view-setup"),
+  };
   const tabs = document.querySelectorAll(".tab");
   function show(name) {
     for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
     document.getElementById("presets-tools").hidden = name !== "presets";
     tabs.forEach((t) => t.classList.toggle("on", t.dataset.view === name));
-    const hash = name === "editor" ? "#editor" : "";
+    const hash = name === "presets" ? "" : "#" + name;
     if (location.hash !== hash) history.replaceState(null, "", location.pathname + location.search + hash);
     if (name === "editor") Editor.shown();
+    if (name === "setup") Setup.shown();
   }
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.view)));
   document.addEventListener("p2k:edit-request", () => { show("editor"); Editor.getFromUnit(); });
-  Midi.init().then(() => show(location.hash === "#editor" ? "editor" : "presets"));
+  Midi.init().then(() => show(views[location.hash.slice(1)] ? location.hash.slice(1) : "presets"));
 })();
 </script>
 </body>

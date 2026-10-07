@@ -26,7 +26,8 @@ const P2KC = (() => {
     CONFIG: 0x09, CONFIG_REQ: 0x0a,
     NAME: 0x0b, NAME_REQ: 0x0c,
     PRESET_DUMP: 0x10, PRESET_DUMP_REQ: 0x11,
-    COPY_PRESET: 0x20,
+    SETUP_DUMP: 0x1c, SETUP_DUMP_REQ: 0x1d,
+    COPY_PRESET: 0x20, COPY_SETUP: 0x2c,
     ERROR: 0x70,
     EOF: 0x7b, WAIT: 0x7c, CANCEL: 0x7d, NAK: 0x7e, ACK: 0x7f,
   };
@@ -184,6 +185,8 @@ const P2KC = (() => {
         }
         return { type: "presetPart", dev, sub };
       }
+      case CMD.SETUP_DUMP:
+        return { type: "setup", dev, bytes: d };
       case CMD.ERROR:
         return { type: "error", dev, cmd: decU14(d[6], d[7]), sub: decU14(d[8], d[9]) };
       case CMD.ACK: return { type: "ack", dev, packet: decU14(d[6], d[7]) };
@@ -301,6 +304,93 @@ const P2KC = (() => {
     };
   }
 
+  /* ---------------------------- setups --------------------------------- */
+  // A setup dump (1Ch) is one message: 7 section counts, the 16-char name, then
+  // params in id order per section (master general, master MIDI, master FX,
+  // master arp - the spec's "reserved" -, non-channel), then each channel's.
+  // Which ids a section skips isn't spelled out. The spec's content list gives
+  // general 257-260, 264.. (prodatum agrees) and MIDI 385, 386, 388, 391..;
+  // prodatum's code counts the MIDI section without gaps. decodeSetup tries
+  // both and keeps the one whose SysEx ID (388) matches the unit that sent it.
+  const SETUP_COUNTS_KEYS = ["general", "midi", "fx", "arp", "nonChannel", "channels", "perChannel"];
+  const DEFAULT_SETUP_COUNTS = { general: 19, midi: 22, fx: 16, arp: 21, nonChannel: 3, channels: 32, perChannel: 9 };
+  const idSeq = (start, skip) => (n) => {
+    const ids = [];
+    for (let id = start; ids.length < n; id++) if (!skip.includes(id)) ids.push(id);
+    return ids;
+  };
+  const SETUP_LAYOUTS = [
+    { name: "spec", general: idSeq(257, [261, 262, 263]), midi: idSeq(385, [387, 389, 390]) },
+    { name: "MIDI without gaps", general: idSeq(257, [261, 262, 263]), midi: idSeq(385, []) },
+  ];
+  function setupSections(layout, c) {
+    return [
+      layout.general(c.general), layout.midi(c.midi),
+      idSeq(513, [])(c.fx), idSeq(641, [])(c.arp), idSeq(139, [])(c.nonChannel),
+    ];
+  }
+  const setupBytes = (c) => 36 + 2 * (c.general + c.midi + c.fx + c.arp + c.nonChannel + c.channels * c.perChannel) + 1;
+
+  const setupDumpRequest = (dev) => msg(dev, CMD.SETUP_DUMP_REQ);
+  // src/dst: setup number 0..127, or -1 for the current setup (one of them must be -1).
+  const copySetup = (dev, src, dst) => msg(dev, CMD.COPY_SETUP, [...enc14(src), ...enc14(dst)]);
+
+  function decodeSetupWith(d, layout, c) {
+    let o = 36;
+    const common = {};
+    for (const ids of setupSections(layout, c)) {
+      for (const id of ids) { common[id] = dec14(d[o], d[o + 1]); o += 2; }
+    }
+    const channels = [];
+    for (let ch = 0; ch < c.channels; ch++) {
+      const p = {};
+      for (const id of idSeq(130, [])(c.perChannel)) { p[id] = dec14(d[o], d[o + 1]); o += 2; }
+      channels.push(p);
+    }
+    return { common, channels };
+  }
+
+  // A decode is plausible when the SysEx ID matches the unit's and the MIDI
+  // section's values sit in their own ranges (a shifted reading puts knob CCs
+  // where the footswitch CCs, 64-79, and knobs I-L, 70-95, belong).
+  function plausibleSetup(common, dev) {
+    const within = (id, lo, hi) => common[id] === undefined || (common[id] >= lo && common[id] <= hi);
+    return common[388] === dev && within(385, 0, 2) &&
+      [399, 400, 401].every((id) => within(id, 64, 79)) && [406, 407, 408, 409].every((id) => within(id, 70, 95));
+  }
+
+  // -> { dev, name, counts, common, channels, layout, verified }
+  function decodeSetup(d) {
+    const w = (k) => decU14(d[k], d[k + 1]);
+    const c = {};
+    SETUP_COUNTS_KEYS.forEach((k, i) => { c[k] = w(6 + i * 2); });
+    if (d.length < setupBytes(c)) throw new Error("setup dump too short: " + d.length + " < " + setupBytes(c));
+    let name = "";
+    for (let i = 20; i < 36; i++) name += String.fromCharCode(d[i] & 0x7f);
+    const dev = d[3];
+    let fallback = null;
+    for (const layout of SETUP_LAYOUTS) {
+      const r = decodeSetupWith(d, layout, c);
+      if (plausibleSetup(r.common, dev)) return Object.assign({ dev, name, counts: c, layout: layout.name, verified: true }, r);
+      if (!fallback) fallback = Object.assign({ dev, name, counts: c, layout: layout.name, verified: false }, r);
+    }
+    return fallback;
+  }
+
+  function encodeSetup(s, { dev = 0, layout = SETUP_LAYOUTS[0] } = {}) {
+    const c = Object.assign({}, DEFAULT_SETUP_COUNTS, s.counts || {});
+    const out = [0xf0, EMU, PROTEUS, dev & 0x7f, EDITOR, CMD.SETUP_DUMP];
+    for (const k of SETUP_COUNTS_KEYS) out.push(...enc14(c[k]));
+    const nm = (s.name || "").padEnd(16).slice(0, 16);
+    for (let i = 0; i < 16; i++) out.push(nm.charCodeAt(i) & 0x7f);
+    for (const ids of setupSections(layout, c)) for (const id of ids) out.push(...enc14((s.common && s.common[id]) | 0));
+    for (let ch = 0; ch < c.channels; ch++) {
+      for (const id of idSeq(130, [])(c.perChannel)) out.push(...enc14((s.channels && s.channels[ch] && s.channels[ch][id]) | 0));
+    }
+    out.push(0xf7);
+    return new Uint8Array(out);
+  }
+
   /* ---------------------------- files ------------------------------------ */
   // Split a byte stream (a .syx file) into individual SysEx messages.
   function splitSysex(bytes) {
@@ -354,5 +444,6 @@ const P2KC = (() => {
     ack, nak, eof, cancel, deviceInquiry,
     classify, dataLength, decodePreset, encodePresetData, encodePreset, PresetAssembler,
     splitSysex, presetsFromSysex, concat, hex, fromHex, clonePreset,
+    DEFAULT_SETUP_COUNTS, SETUP_LAYOUTS, setupDumpRequest, copySetup, decodeSetup, encodeSetup,
   };
 })();
